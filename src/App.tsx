@@ -25,7 +25,9 @@ import {
   Clock,
   History,
   Palette,
-  Compass
+  Compass,
+  Home,
+  Monitor
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -566,6 +568,30 @@ export default function App() {
              <span className="text-white">85%</span>
           </div>
           <div className="flex items-center gap-4">
+            <button 
+              onClick={() => {
+                if (document.fullscreenElement) {
+                  document.exitFullscreen();
+                } else {
+                  document.documentElement.requestFullscreen();
+                }
+              }}
+              className="p-1.5 hover:text-white transition-colors" 
+              title="Fullscreen"
+            >
+              <Maximize size={18} />
+            </button>
+            <button 
+              onClick={() => {
+                setHasStarted(false);
+                if (stream) stream.getTracks().forEach(t => t.stop());
+                setStream(null);
+              }}
+              className="p-1.5 hover:text-white transition-colors" 
+              title="Home"
+            >
+              <Home size={18} />
+            </button>
             <button onClick={() => setShowGrid(!showGrid)} className={`p-1.5 transition-colors ${showGrid ? 'text-accent' : 'hover:text-white'}`}>
               <Grid3X3 size={18} />
             </button>
