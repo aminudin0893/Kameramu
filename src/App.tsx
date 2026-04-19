@@ -46,6 +46,20 @@ const getGeminiKey = () => {
 
 const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
 
+const toggleFullscreen = () => {
+  const doc = document as any;
+  const docEl = document.documentElement as any;
+
+  const requestFullscreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+  const exitFullscreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+
+  if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+    if (requestFullscreen) requestFullscreen.call(docEl).catch((e: any) => console.warn("Fullscreen failed:", e));
+  } else {
+    if (exitFullscreen) exitFullscreen.call(doc);
+  }
+};
+
 type Mode = 'PHOTO' | 'PORTRAIT' | 'PRO';
 
 interface FilterPreset {
@@ -429,7 +443,8 @@ export default function App() {
             sctx.globalCompositeOperation = 'destination-in';
             sctx.drawImage(maskCanvas, 0, 0);
             
-            ctx.restore(); // restore to blurred state
+            ctx.restore(); 
+            ctx.filter = 'none'; // CRITICAL: Reset filter so sharp subject isn't drawn blurred
             ctx.drawImage(sharpCanvas, 0, 0);
           }
         }
@@ -573,16 +588,10 @@ export default function App() {
             </button>
 
             <button 
-              onClick={() => {
-                if (document.fullscreenElement) {
-                  document.exitFullscreen();
-                } else {
-                  document.documentElement.requestFullscreen();
-                }
-              }}
-              className="flex items-center gap-2 text-white/40 hover:text-white transition-colors text-[10px] uppercase font-bold tracking-widest"
+              onClick={toggleFullscreen}
+              className="flex items-center gap-2 text-white/40 hover:text-white transition-colors text-[11px] uppercase font-bold tracking-[0.2em] border border-white/10 px-6 py-3 rounded-full hover:bg-white/5 active:scale-95"
             >
-              <Maximize size={14} />
+              <Maximize size={16} />
               <span>Full Screen</span>
             </button>
 
