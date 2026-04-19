@@ -127,6 +127,8 @@ export default function App() {
   // Timemark State
   const [timemarkEnabled, setTimemarkEnabled] = useState(false);
   const [timemarkManualText, setTimemarkManualText] = useState("");
+  const [useManualDate, setUseManualDate] = useState(false);
+  const [manualDateValue, setManualDateValue] = useState(new Date().toISOString().split('T')[0]);
   const [locationText, setLocationText] = useState("Pro Sensor Active");
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
   const [showSettings, setShowSettings] = useState(false);
@@ -309,29 +311,43 @@ export default function App() {
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
+      // Apply filters to capture (matching the viewfinder)
+      // Note: We use a simplified global blur if focus > 0 to ensure settings are burned in
+      const blurVal = focus > 0 ? focus / 4 : 0; 
+      const filters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10}) blur(${blurVal}px)`;
+      ctx.filter = filters;
+      
       ctx.drawImage(video, 0, 0);
+      
+      // Reset filter for Timemark text overlay
+      ctx.filter = 'none';
       
       // Burn-in Timemark if enabled
       if (timemarkEnabled) {
-        ctx.font = 'bold 24px "JetBrains Mono", monospace';
+        ctx.font = 'bold 32px "JetBrains Mono", monospace';
         ctx.fillStyle = 'white';
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = 6;
         ctx.shadowColor = 'black';
         ctx.textAlign = 'left';
         
-        const timestamp = new Date().toLocaleString();
+        // Formatting Indonesian Date
+        const daysIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+        const d = useManualDate ? new Date(manualDateValue) : new Date();
+        const formattedDate = `${daysIndo[d.getDay()]}, ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        const timestamp = formattedDate + (useManualDate ? "" : ` • ${new Date().toLocaleTimeString()}`);
+        
         const address = timemarkManualText ? `${timemarkManualText} • ${locationText}` : locationText;
         
-        ctx.fillText(timestamp, 30, video.videoHeight - 70);
-        ctx.font = '18px "JetBrains Mono", monospace';
-        ctx.fillText(address, 30, video.videoHeight - 40);
+        ctx.fillText(timestamp, 40, video.videoHeight - 100);
+        ctx.font = '24px "JetBrains Mono", monospace';
+        ctx.fillText(address, 40, video.videoHeight - 60);
       }
 
       setCapturedImage(canvas.toDataURL('image/jpeg', 0.95)); // High Quality
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, []);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus]);
 
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
@@ -487,16 +503,37 @@ export default function App() {
               {timemarkEnabled && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-1">
                    {/* Timemark Settings (existing) */}
-                   <div className="space-y-2">
-                     <label className="text-[8px] uppercase text-text-dim block">Manual Annotations</label>
+                   <div className="space-y-3">
+                     <label className="text-[8px] uppercase text-text-dim block">Annotation Details</label>
                      <input 
                       type="text" 
-                      placeholder="Enter Custom Text..."
+                      placeholder="Custom label (e.g. Project Name)"
                       value={timemarkManualText}
                       onChange={(e) => setTimemarkManualText(e.target.value)}
                       className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent transition-colors"
                      />
-                     <div className="flex items-center gap-2 text-[8px] text-text-dim">
+                     
+                     {/* Manual Date Toggle */}
+                     <div className="flex items-center justify-between py-2 border-t border-white/5">
+                        <span className="text-[9px] text-white/60">Use Manual Date</span>
+                        <button 
+                          onClick={() => setUseManualDate(!useManualDate)}
+                          className={`w-8 h-4 rounded-full relative transition-colors ${useManualDate ? 'bg-accent' : 'bg-white/10'}`}
+                        >
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${useManualDate ? 'translate-x-4' : ''}`} />
+                        </button>
+                     </div>
+
+                     {useManualDate && (
+                        <input 
+                          type="date"
+                          value={manualDateValue}
+                          onChange={(e) => setManualDateValue(e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent"
+                        />
+                     )}
+
+                     <div className="flex items-center gap-2 text-[8px] text-text-dim pt-1">
                        <MapPin size={8} />
                        <span className="truncate">{locationText}</span>
                      </div>
@@ -647,10 +684,17 @@ export default function App() {
                 animate={{ opacity: 1 }}
                 className="absolute bottom-6 left-6 z-40 flex flex-col gap-1 pointer-events-none drop-shadow-lg"
               >
-                <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                  <Clock size={12} className="text-accent" />
-                  <span className="text-[10px] font-mono font-bold text-white uppercase tracking-widest">{currentTime}</span>
-                </div>
+                  <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                    <Clock size={12} className="text-accent" />
+                    <span className="text-[10px] font-mono font-bold text-white uppercase tracking-widest">
+                      {(() => {
+                        const daysIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+                        const d = useManualDate ? new Date(manualDateValue) : new Date();
+                        const formattedDate = `${daysIndo[d.getDay()]}, ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+                        return useManualDate ? formattedDate : `${formattedDate} • ${new Date().toLocaleTimeString()}`;
+                      })()}
+                    </span>
+                  </div>
                 {(locationText || timemarkManualText) && (
                   <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
                     <MapPin size={12} className="text-accent" />
