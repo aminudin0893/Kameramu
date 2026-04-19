@@ -399,6 +399,12 @@ export default function App() {
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
+      // Handle Mirroring for Front Camera Capture
+      if (facingMode === 'user') {
+        ctx.translate(video.videoWidth, 0);
+        ctx.scale(-1, 1);
+      }
+
       // Selective Blur Logic
       const blurVal = focus > 0 ? focus / 4 : 0; 
       const baseFilters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10}) ${activeFilter.css}`;
@@ -545,7 +551,10 @@ export default function App() {
   };
 
   // Dynamically calculate filters based on manual controls + Selection
+  // Adding a "Smart Enhance" pass to all filters for "Auto Color Adjustment"
+  const smartPass = "brightness(1.02) contrast(1.05) saturate(1.02)";
   const cameraFilters = `
+    ${smartPass}
     brightness(${1 + exposure / 100})
     contrast(${1 + Math.abs(exposure) / 200})
     hue-rotate(${wb * 0.5}deg)
@@ -782,7 +791,7 @@ export default function App() {
               autoPlay 
               playsInline 
               muted
-              className="w-full h-full object-cover transition-all"
+              className={`w-full h-full object-cover transition-all ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
               style={{ 
                 filter: cameraFilters,
                 WebkitFilter: cameraFilters,
@@ -868,7 +877,7 @@ export default function App() {
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 50 }}
-                className="absolute right-24 top-1/2 -translate-y-1/2 z-50 bg-panel border border-ui-border rounded-2xl p-2 flex flex-col gap-2 backdrop-blur-xl"
+                className="absolute right-20 md:right-24 top-1/2 -translate-y-1/2 z-50 bg-panel border border-ui-border rounded-2xl p-2 flex flex-col gap-2 backdrop-blur-xl max-h-[70vh] overflow-y-auto no-scrollbar"
               >
                 {FILTER_PRESETS.map((f) => (
                   <button 
