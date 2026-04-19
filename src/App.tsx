@@ -78,6 +78,11 @@ export default function App() {
         stream.getTracks().forEach(t => t.stop());
       }
       
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraError("Browser tidak mendukung akses kamera. Gunakan Chrome/Safari terbaru via HTTPS.");
+        return;
+      }
+
       try {
         const constraints: MediaStreamConstraints = { 
           video: { 
@@ -92,10 +97,28 @@ export default function App() {
         setStream(res);
         if (videoRef.current) {
           videoRef.current.srcObject = res;
+          videoRef.current.play().catch(e => console.error("Playback failed", e));
         }
       } catch (err: any) {
-        console.error("Camera access denied", err);
-        setCameraError(err.message || "Could not access camera. Please ensure permissions are granted and you are using HTTPS.");
+        console.warn("Retrying with minimal constraints...", err);
+        try {
+          // Fallback minimal
+          const fallbackRes = await navigator.mediaDevices.getUserMedia({ video: true });
+          activeStream = fallbackRes;
+          setStream(fallbackRes);
+          if (videoRef.current) {
+            videoRef.current.srcObject = fallbackRes;
+            videoRef.current.play().catch(e => console.error("Playback failed", e));
+          }
+        } catch (fallbackErr: any) {
+          console.error("All camera fallbacks failed", fallbackErr);
+          let userMsg = "Gagal mengakses kamera.";
+          if (fallbackErr.name === 'NotAllowedError') userMsg = "Izin kamera ditolak. Silakan cek pengaturan browser Anda.";
+          if (fallbackErr.name === 'NotFoundError') userMsg = "Hardware kamera tidak ditemukan.";
+          if (window.location.protocol !== 'https:') userMsg = "Kamera butuh HTTPS. Gunakan URL https://.";
+          
+          setCameraError(`${userMsg} (Error: ${fallbackErr.name})`);
+        }
       }
     }
     
@@ -244,6 +267,11 @@ export default function App() {
               >
                 Retry Connection
               </button>
+            </div>
+          ) : !stream ? (
+            <div className="flex flex-col items-center gap-4 animate-pulse">
+              <div className="w-16 h-16 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+              <span className="text-[10px] uppercase tracking-widest text-accent">Initializing Sensor...</span>
             </div>
           ) : (
             <video 
