@@ -23,7 +23,9 @@ import {
   ZapOff,
   MapPin,
   Clock,
-  History
+  History,
+  Palette,
+  Compass
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -43,6 +45,21 @@ const getGeminiKey = () => {
 const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
 
 type Mode = 'PHOTO' | 'PORTRAIT' | 'PRO';
+
+interface FilterPreset {
+  id: string;
+  name: string;
+  css: string;
+  icon: string;
+}
+
+const FILTER_PRESETS: FilterPreset[] = [
+  { id: 'standard', name: 'Standard', css: '', icon: 'Standard' },
+  { id: 'vivid', name: 'Vivid', css: 'saturate(1.5) contrast(1.1) brightness(1.05)', icon: 'Vibrant' },
+  { id: 'fresh', name: 'Fresh', css: 'brightness(1.1) saturate(1.2) hue-rotate(-5deg) contrast(1.05)', icon: 'Clear' },
+  { id: 'cinematic', name: 'Cinematic', css: 'contrast(1.2) saturate(0.8) sepia(0.2) hue-rotate(5deg)', icon: 'Cinema' },
+  { id: 'mono', name: 'Mono', css: 'grayscale(1) contrast(1.3) brightness(1.1)', icon: 'B&W' },
+];
 
 // Dot-based pose silhouettes (coordinates from 0-100)
 const DOT_POSES = [
@@ -134,6 +151,14 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [focusPoint, setFocusPoint] = useState({ x: 50, y: 50 }); // Percentage
   const [showFocusRing, setShowFocusRing] = useState(false);
+  
+  // Tilt/Level State
+  const [tilt, setTilt] = useState({ roll: 0, pitch: 0 });
+  const [showLevel, setShowLevel] = useState(true);
+
+  // Filter State
+  const [activeFilter, setActiveFilter] = useState<FilterPreset>(FILTER_PRESETS[0]);
+  const [showFilters, setShowFilters] = useState(false);
 
   const handleViewfinderTap = (e: React.MouseEvent | React.TouchEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -147,6 +172,34 @@ export default function App() {
     setShowFocusRing(true);
     setTimeout(() => setShowFocusRing(false), 800);
   };
+
+  // Device Orientation for Level Meter
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.DeviceOrientationEvent) return;
+    
+    // Check for iOS 13+ permission requirement
+    const requestPermission = async () => {
+      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        try {
+          await (DeviceOrientationEvent as any).requestPermission();
+        } catch (e) {
+          console.warn("Orientation permission denied:", e);
+        }
+      }
+    };
+
+    window.addEventListener('deviceorientation', (e) => {
+      // Gamma is left-to-right tilt (roll)
+      // Beta is front-to-back tilt (pitch)
+      if (e.gamma !== null && e.beta !== null) {
+        setTilt({ roll: Math.round(e.gamma), pitch: Math.round(e.beta) });
+      }
+    });
+
+    return () => {
+      window.removeEventListener('deviceorientation', () => {});
+    };
+  }, []);
 
   // Update time every second
   useEffect(() => {
@@ -328,7 +381,8 @@ export default function App() {
     if (ctx) {
       // Selective Blur Logic
       const blurVal = focus > 0 ? focus / 4 : 0; 
-      const sharpFilters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10})`;
+      const baseFilters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10}) ${activeFilter.css}`;
+      const sharpFilters = baseFilters;
       const blurredFilters = `${sharpFilters} blur(${blurVal}px)`;
       
       if (blurVal > 0) {
@@ -342,8 +396,6 @@ export default function App() {
         const fY = (focusPoint.y / 100) * video.videoHeight;
         const radius = Math.min(video.videoWidth, video.videoHeight) * 0.2;
         
-        // Smooth transition: draw multiple layers or use a gradient mask?
-        // Simple circular clip for now to ensure performance
         ctx.beginPath();
         ctx.arc(fX, fY, radius, 0, Math.PI * 2);
         ctx.clip();
@@ -385,7 +437,7 @@ export default function App() {
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus, focusPoint]);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus, focusPoint, activeFilter]);
 
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
@@ -442,12 +494,13 @@ export default function App() {
     }
   };
 
-  // Dynamically calculate filters based on manual controls
+  // Dynamically calculate filters based on manual controls + Selection
   const cameraFilters = `
     brightness(${1 + exposure / 100})
     contrast(${1 + Math.abs(exposure) / 200})
     hue-rotate(${wb * 0.5}deg)
     saturate(${1 + iso / 10})
+    ${activeFilter.css}
   `;
 
   if (!hasStarted) {
@@ -467,7 +520,17 @@ export default function App() {
           
           <div className="pt-6">
             <button 
-              onClick={() => setHasStarted(true)}
+              onClick={async () => {
+                // Request orientation permission for iOS
+                if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+                  try {
+                    await (DeviceOrientationEvent as any).requestPermission();
+                  } catch (e) {
+                    console.warn("Sensor permission error:", e);
+                  }
+                }
+                setHasStarted(true);
+              }}
               className="group relative inline-flex items-center gap-3 px-12 py-5 bg-accent text-white rounded-full font-bold uppercase tracking-widest text-[11px] hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-accent/40"
             >
               <span>Mulai Fotografi</span>
@@ -660,6 +723,20 @@ export default function App() {
           {/* Side Panel Overlay (Theme Design) */}
           <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-40">
             <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showFilters ? 'border-accent' : ''}`}
+            >
+              <span className="text-[8px] text-text-dim uppercase font-bold tracking-tighter">Filter</span>
+              <Palette size={16} className={showFilters ? "text-accent" : "text-white/20"} />
+            </button>
+            <button 
+              onClick={() => setShowLevel(!showLevel)}
+              className={`bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showLevel && Math.abs(tilt.roll) < 2 ? 'border-accent' : ''}`}
+            >
+              <span className="text-[8px] text-text-dim uppercase font-bold tracking-tighter">Level</span>
+              <Compass size={16} className={showLevel ? "text-accent" : "text-white/20"} />
+            </button>
+            <button 
               onClick={() => setTorchOn(!torchOn)}
               className={`bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${torchOn ? 'border-accent' : ''}`}
             >
@@ -701,9 +778,45 @@ export default function App() {
              <div className="absolute top-0 left-0 bg-accent text-white px-2 py-0.5 text-[8px] uppercase font-bold">Subject: Detected</div>
           </div>
 
-          {/* Pose Ghost Overlay */}
+          {/* Horizon / Level Meter */}
+          {showLevel && (
+            <div className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center">
+               <motion.div 
+                 animate={{ rotate: tilt.roll }}
+                 className={`w-48 h-[1px] relative flex items-center justify-center transition-colors duration-300 ${Math.abs(tilt.roll) < 2 ? 'bg-accent' : 'bg-white/30'}`}
+               >
+                 <div className={`absolute -top-1.5 w-1.5 h-3 border-l ${Math.abs(tilt.roll) < 2 ? 'border-accent' : 'border-white/30'}`} />
+                 <div className="absolute -left-4 text-[8px] font-mono text-white/50">{tilt.roll}°</div>
+               </motion.div>
+            </div>
+          )}
+
+          {/* Filter Selection Panel */}
           <AnimatePresence>
-            {recommendedPoseIdx !== null && <DotSilhouette poseIndex={recommendedPoseIdx} />}
+            {showFilters && (
+              <motion.div 
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 50 }}
+                className="absolute right-24 top-1/2 -translate-y-1/2 z-50 bg-panel border border-ui-border rounded-2xl p-2 flex flex-col gap-2 backdrop-blur-xl"
+              >
+                {FILTER_PRESETS.map((f) => (
+                  <button 
+                    key={f.id}
+                    onClick={() => { setActiveFilter(f); setShowFilters(false); }}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-white/5 ${activeFilter.id === f.id ? 'bg-accent/10 border border-accent/30' : 'border border-transparent'}`}
+                  >
+                    <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center bg-gradient-to-br from-white/10 to-transparent">
+                       <span className="text-[8px] font-bold text-white/50">{f.icon[0]}</span>
+                    </div>
+                    <div className="text-left">
+                      <p className={`text-[10px] font-bold uppercase tracking-tight ${activeFilter.id === f.id ? 'text-accent' : 'text-white'}`}>{f.name}</p>
+                      <p className="text-[8px] text-text-dim">{f.icon}</p>
+                    </div>
+                  </button>
+                ))}
+              </motion.div>
+            )}
           </AnimatePresence>
 
           <AnimatePresence>
