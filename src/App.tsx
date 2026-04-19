@@ -25,12 +25,24 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Safe lookup for API key to prevent crashes in different environments (Vite vs Node)
+const getGeminiKey = () => {
+  try {
+    // Cast to any to avoid TS errors in environments without vite-client types
+    const metaEnv = (import.meta as any).env;
+    const key = (metaEnv?.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '')) as string;
+    return key || '';
+  } catch {
+    return '';
+  }
+};
+
+const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
 
 type Mode = 'PHOTO' | 'PORTRAIT' | 'PRO';
 
 export default function App() {
+  const [hasStarted, setHasStarted] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [mode, setMode] = useState<Mode>('PHOTO');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
@@ -41,6 +53,7 @@ export default function App() {
   const [poseIndex, setPoseIndex] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
   
   const poses = [
     { name: "Neutral", shape: "rounded-[40%]" },
@@ -69,6 +82,8 @@ export default function App() {
 
   // Initialize Camera
   const startCamera = useCallback(async () => {
+    if (!hasStarted) return;
+    setIsInitializing(true);
     setCameraError(null);
     console.log("System: Starting camera sequence...", facingMode);
     
@@ -85,8 +100,6 @@ export default function App() {
       // 2. Constraints for Rear Camera
       const constraints: MediaStreamConstraints = { 
         video: { 
-          // Using exact for environment if we know it's a phone, 
-          // but ideal is safer as fallback.
           facingMode: { ideal: facingMode }, 
           width: { ideal: 1280 },
           height: { ideal: 720 }
@@ -101,12 +114,10 @@ export default function App() {
         const video = videoRef.current;
         video.srcObject = res;
         
-        // Critical for iOS/Chrome Mobile
         video.setAttribute('playsinline', '');
         video.setAttribute('muted', '');
         video.muted = true;
         
-        // Attempt immediate play, with tiny timeout as buffer
         setTimeout(() => {
           video.play().catch(e => {
             console.warn("Auto-play prevented by browser policy", e);
@@ -114,10 +125,8 @@ export default function App() {
         }, 50);
       }
     } catch (err: any) {
-      console.warn("Camera init failed, trying ultra-basic constraints:", err);
-      
+      console.warn("Camera init failed, trying fallback:", err);
       try {
-        // Fallback: minimal possible video request
         const fallbackRes = await navigator.mediaDevices.getUserMedia({ video: true });
         setStream(fallbackRes);
         if (videoRef.current) {
@@ -126,22 +135,25 @@ export default function App() {
         }
       } catch (fallbackErr: any) {
         let msg = "Kamera Gagal Dimuat.";
-        if (fallbackErr.name === 'NotAllowedError') msg = "Izin Ditolak. Silakan aktifkan izin kamera di browser HP Anda.";
+        if (fallbackErr.name === 'NotAllowedError') msg = "Izin Ditolak. Silakan aktifkan izin kamera di pengaturan browser.";
         else if (fallbackErr.name === 'NotFoundError') msg = "Hardware kamera tidak terdeteksi.";
-        else if (fallbackErr.name === 'NotReadableError') msg = "Kamera sedang digunakan aplikasi lain.";
+        else if (window.location.protocol !== 'https:') msg = "Akses kamera membutuhkan koneksi HTTPS aman.";
         
         setCameraError(`${msg} (${fallbackErr.name})`);
       }
+    } finally {
+      setIsInitializing(false);
     }
-  }, [facingMode]);
+  }, [facingMode, hasStarted]);
 
   useEffect(() => {
-    startCamera();
+    if (hasStarted) {
+      startCamera();
+    }
     return () => {
-      // Logic for track stopping when switching mode or unmounting
-      // handled inside startCamera during the cleanup phase.
+      if (stream) stream.getTracks().forEach(t => t.stop());
     };
-  }, [facingMode]);
+  }, [facingMode, hasStarted]);
 
   // Handle Torch
   useEffect(() => {
@@ -236,6 +248,38 @@ export default function App() {
     hue-rotate(${wb * 0.5}deg)
     saturate(${1 + iso / 10})
   `;
+
+  if (!hasStarted) {
+    return (
+      <div className="fixed inset-0 bg-bg flex items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-8">
+          <div className="space-y-4">
+            <div className="inline-flex p-4 bg-accent/5 rounded-full border border-accent/20 mb-4 scale-110">
+              <Camera size={48} className="text-accent" />
+            </div>
+            <h1 className="text-4xl font-bold text-white tracking-tighter uppercase italic leading-none">Lumix Pro Camera</h1>
+            <p className="text-text-dim text-sm px-4 leading-relaxed">
+              Selamat datang di aplikasi kamera profesional. <br/>
+              Aplikasi memerlukan izin akses kamera untuk berfungsi sebagai alat bidik presisi tinggi.
+            </p>
+          </div>
+          
+          <div className="pt-6">
+            <button 
+              onClick={() => setHasStarted(true)}
+              className="group relative inline-flex items-center gap-3 px-12 py-5 bg-accent text-white rounded-full font-bold uppercase tracking-widest text-[11px] hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-accent/40"
+            >
+              <span>Mulai Fotografi</span>
+              <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+            <p className="mt-8 text-[10px] text-text-dim font-mono tracking-widest opacity-30">
+              OPTIMIZED FOR MOBILE HP • VER 2.1.0
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-bg flex flex-col font-sans text-text-dim selection:bg-accent/30">
