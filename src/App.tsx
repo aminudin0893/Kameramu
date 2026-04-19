@@ -20,7 +20,10 @@ import {
   Download,
   X,
   Zap,
-  ZapOff
+  ZapOff,
+  MapPin,
+  Clock,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -41,8 +44,74 @@ const ai = new GoogleGenAI({ apiKey: getGeminiKey() });
 
 type Mode = 'PHOTO' | 'PORTRAIT' | 'PRO';
 
+// Dot-based pose silhouettes (coordinates from 0-100)
+const DOT_POSES = [
+  {
+    name: "Golden Ratio Stand",
+    points: [
+      {x: 50, y: 15}, {x: 50, y: 30}, {x: 40, y: 45}, {x: 60, y: 45},
+      {x: 35, y: 65}, {x: 65, y: 65}, {x: 50, y: 50}, {x: 45, y: 85}, {x: 55, y: 85}
+    ]
+  },
+  {
+    name: "Classic S-Curve",
+    points: [
+      {x: 55, y: 12}, {x: 50, y: 28}, {x: 45, y: 44}, {x: 50, y: 60},
+      {x: 55, y: 76}, {x: 45, y: 92}, {x: 40, y: 35}, {x: 65, y: 40}
+    ]
+  },
+  {
+    name: "Fashion Lean",
+    points: [
+      {x: 40, y: 10}, {x: 42, y: 25}, {x: 45, y: 45}, {x: 50, y: 70},
+      {x: 55, y: 90}, {x: 65, y: 30}, {x: 70, y: 55}, {x: 30, y: 50}
+    ]
+  }
+];
+
+function DotSilhouette({ poseIndex }: { poseIndex: number }) {
+  const pose = DOT_POSES[poseIndex] || DOT_POSES[0];
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 0.6 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 pointer-events-none z-30"
+    >
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        {pose.points.map((p, i) => (
+          <motion.circle
+            key={i}
+            cx={p.x}
+            cy={p.y}
+            r="0.8"
+            fill="#FF4D00"
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1.5, 1] }}
+            transition={{ delay: i * 0.05 }}
+          />
+        ))}
+        {/* Connecting Lines for "Skeleton" look */}
+        <polyline
+          points={pose.points.map(p => `${p.x},${p.y}`).join(' ')}
+          fill="none"
+          stroke="#FF4D00"
+          strokeWidth="0.1"
+          strokeDasharray="1 1"
+          opacity="0.3"
+        />
+      </svg>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-[150px] bg-accent/20 backdrop-blur-md px-3 py-1 rounded-full border border-accent/40">
+        <span className="text-[10px] text-accent font-bold uppercase tracking-widest">{pose.name}</span>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function App() {
   const [hasStarted, setHasStarted] = useState(false);
+  const [showPoseDots, setShowPoseDots] = useState(false);
+  const [recommendedPoseIdx, setRecommendedPoseIdx] = useState<number | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [mode, setMode] = useState<Mode>('PHOTO');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
@@ -54,6 +123,50 @@ export default function App() {
   const [torchOn, setTorchOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  
+  // Timemark State
+  const [timemarkEnabled, setTimemarkEnabled] = useState(false);
+  const [timemarkManualText, setTimemarkManualText] = useState("");
+  const [locationText, setLocationText] = useState("Pro Sensor Active");
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Update time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Geolocation Logic
+  const fetchLocation = useCallback(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          // Add User-Agent as required by Nominatim usage policy if possible, but browser fetch is fine for simple demo
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          const data = await res.json();
+          // Extract more readable address
+          const city = data.address.city || data.address.town || data.address.village || "";
+          const county = data.address.county || "";
+          const addr = city ? `${city}, ${county}` : `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+          setLocationText(addr);
+        } catch {
+          setLocationText(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        }
+      },
+      () => setLocationText("GPS Access Denied")
+    );
+  }, []);
+
+  useEffect(() => {
+    if (timemarkEnabled) {
+      fetchLocation();
+    }
+  }, [timemarkEnabled, fetchLocation]);
   
   const poses = [
     { name: "Neutral", shape: "rounded-[40%]" },
@@ -195,9 +308,24 @@ export default function App() {
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
-      // Apply manual adjustments to canvas if needed, or rely on CSS filters applied to video
-      // Here we just grab the frame
       ctx.drawImage(video, 0, 0);
+      
+      // Burn-in Timemark if enabled
+      if (timemarkEnabled) {
+        ctx.font = 'bold 24px "JetBrains Mono", monospace';
+        ctx.fillStyle = 'white';
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = 'black';
+        ctx.textAlign = 'left';
+        
+        const timestamp = new Date().toLocaleString();
+        const address = timemarkManualText ? `${timemarkManualText} • ${locationText}` : locationText;
+        
+        ctx.fillText(timestamp, 30, video.videoHeight - 70);
+        ctx.font = '18px "JetBrains Mono", monospace';
+        ctx.fillText(address, 30, video.videoHeight - 40);
+      }
+
       setCapturedImage(canvas.toDataURL('image/jpeg'));
     }
     
@@ -224,7 +352,18 @@ export default function App() {
         contents: [
           {
             parts: [
-              { text: "Analyze this camera view. Identify main objects and provide 3 short, professional photography tips for composition and 1 specific artistic pose suggestion for the subject if it's a person. Return JSON: { \"objects\": [], \"tips\": [], \"pose\": \"\" }" },
+              { text: `Analyze this camera view. Identify main objects and provide professional photography tips.
+                       CRITICAL: If a person is the subject and their pose or position is sub-optimal for the current background/composition:
+                       1. Set "pose_score" (1-10) where < 7 means a better pose is needed.
+                       2. Set "recommended_pose_id" to 0 (Standing), 1 (S-Curve), or 2 (Fashion Lean) based on what fits the scene best.
+                       
+                       Return JSON strictly: { 
+                         "objects": [], 
+                         "tips": [], 
+                         "pose": "string description",
+                         "pose_score": number,
+                         "recommended_pose_id": number | null
+                       }` },
               { inlineData: { mimeType: "image/jpeg", data: base64Image } }
             ]
           }
@@ -234,6 +373,13 @@ export default function App() {
 
       const data = JSON.parse(response.text || '{}');
       setAiFeedback(data);
+      
+      // Automatically show recommended dots if pose score is low and feature is enabled
+      if (showPoseDots && data.pose_score < 8 && data.recommended_pose_id !== null) {
+        setRecommendedPoseIdx(data.recommended_pose_id);
+      } else {
+        setRecommendedPoseIdx(null);
+      }
     } catch (err) {
       console.error("AI Analysis failed", err);
     } finally {
@@ -305,16 +451,79 @@ export default function App() {
             <button onClick={() => setShowGrid(!showGrid)} className={`p-1.5 transition-colors ${showGrid ? 'text-accent' : 'hover:text-white'}`}>
               <Grid3X3 size={18} />
             </button>
-            <button className="p-1.5 hover:text-white transition-colors">
+            <button className="p-1.5 hover:text-white transition-colors" onClick={() => setShowSettings(!showSettings)}>
               <Settings size={18} />
             </button>
           </div>
         </div>
       </div>
 
+      {/* Settings Modal (Timemark Configuration) */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute top-16 right-8 w-64 bg-panel border border-ui-border rounded-2xl p-4 z-[60] backdrop-blur-2xl shadow-2xl"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white">Settings</span>
+              <button onClick={() => setShowSettings(false)} className="text-white/30 hover:text-white"><X size={14} /></button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold tracking-tighter">Enable Timemark</span>
+                <button 
+                  onClick={() => setTimemarkEnabled(!timemarkEnabled)}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${timemarkEnabled ? 'bg-accent' : 'bg-white/10'}`}
+                >
+                  <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform ${timemarkEnabled ? 'translate-x-5' : ''}`} />
+                </button>
+              </div>
+              
+              {timemarkEnabled && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-1">
+                   {/* Timemark Settings (existing) */}
+                   <div className="space-y-2">
+                     <label className="text-[8px] uppercase text-text-dim block">Manual Annotations</label>
+                     <input 
+                      type="text" 
+                      placeholder="Enter Custom Text..."
+                      value={timemarkManualText}
+                      onChange={(e) => setTimemarkManualText(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent transition-colors"
+                     />
+                     <div className="flex items-center gap-2 text-[8px] text-text-dim">
+                       <MapPin size={8} />
+                       <span className="truncate">{locationText}</span>
+                     </div>
+                   </div>
+
+                   {/* AI Pose Dots Toggle */}
+                   <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                     <div className="flex flex-col">
+                       <span className="text-[10px] uppercase font-bold tracking-tighter">AI Pose Dots</span>
+                       <span className="text-[8px] text-text-dim">Show recommended pose points</span>
+                     </div>
+                     <button 
+                       onClick={() => setShowPoseDots(!showPoseDots)}
+                       className={`w-10 h-5 rounded-full relative transition-colors ${showPoseDots ? 'bg-accent' : 'bg-white/10'}`}
+                     >
+                       <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform ${showPoseDots ? 'translate-x-5' : ''}`} />
+                     </button>
+                   </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main Viewfinder Section */}
-      <div className="relative flex-1 bg-black overflow-hidden flex items-center justify-center p-3">
-        <div className="relative w-full h-full rounded-sm overflow-hidden border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900">
+      <div className="relative flex-1 bg-black overflow-hidden flex items-center justify-center p-2 sm:p-3">
+        <div className="relative w-full h-full rounded-sm overflow-hidden border-[1px] md:border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900">
           {cameraError ? (
             <div className="text-center p-8 space-y-4 z-50">
               <Camera size={48} className="mx-auto text-accent mb-4 opacity-50" />
@@ -401,6 +610,10 @@ export default function App() {
 
           {/* Pose Ghost Overlay */}
           <AnimatePresence>
+            {recommendedPoseIdx !== null && <DotSilhouette poseIndex={recommendedPoseIdx} />}
+          </AnimatePresence>
+
+          <AnimatePresence>
             <motion.div 
               key={poseIndex}
               initial={{ scale: 0.9, opacity: 0 }}
@@ -425,7 +638,36 @@ export default function App() {
             }}
           />
 
-          {/* AI Feedback Tooltip */}
+          {/* Timemark Overlay */}
+          <AnimatePresence>
+            {timemarkEnabled && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="absolute bottom-6 left-6 z-40 flex flex-col gap-1 pointer-events-none drop-shadow-lg"
+              >
+                <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                  <Clock size={12} className="text-accent" />
+                  <span className="text-[10px] font-mono font-bold text-white uppercase tracking-widest">{currentTime}</span>
+                </div>
+                {(locationText || timemarkManualText) && (
+                  <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                    <MapPin size={12} className="text-accent" />
+                    <span className="text-[10px] font-mono text-white/80 uppercase tracking-tight">
+                      {timemarkManualText ? `${timemarkManualText} • ` : ''}{locationText}
+                    </span>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Captured Preview (Small thumbnail) */}
+          {capturedImage && (
+            <div className="absolute top-6 left-6 z-40 w-16 h-16 rounded-lg border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-110 transition-transform cursor-pointer" onClick={() => setShowSettings(false)}>
+               <img src={capturedImage} className="w-full h-full object-cover" />
+            </div>
+          )}
           <AnimatePresence>
             {aiFeedback && (
               <motion.div 
@@ -482,10 +724,10 @@ export default function App() {
         </div>
       </div>
 
-      {/* Bottom Interface - Grid 1fr 2fr 1fr */}
-      <div className="h-40 bg-[#111] border-t border-ui-border grid grid-cols-[1fr,2fr,1fr] items-center px-10 gap-8 z-30">
-        {/* Left: Blur Slider Area */}
-        <div className="space-y-3">
+      {/* Bottom Interface - Responsive Grid */}
+      <div className="min-h-[140px] md:h-40 bg-[#111] border-t border-ui-border flex flex-col md:grid md:grid-cols-[1fr,2fr,1fr] items-center px-6 md:px-10 py-4 gap-4 md:gap-8 z-30">
+        {/* Left: Blur Slider Area - Hidden on small mobile to save space */}
+        <div className="hidden md:block w-full space-y-3">
           <div className="flex items-center justify-between text-[10px] font-bold text-text-dim uppercase tracking-wider">
             <span>Aperture Blur</span>
             <span className="text-white italic">f/1.8</span>
@@ -520,35 +762,43 @@ export default function App() {
             ))}
           </div>
 
-          <div className="flex items-center gap-12">
+          <div className="flex items-center gap-6 md:gap-12">
+            <button 
+              onClick={() => {
+                setShowPoseDots(!showPoseDots);
+                if (!showPoseDots) analyzeScene(); // Trigger analysis when enabling
+              }}
+              className={`p-3 md:p-4 rounded-full border transition-all ${showPoseDots ? 'border-accent bg-accent/20' : 'border-white/10'}`}
+              title="AI Pose Recommendation"
+            >
+              <Info size={20} className={showPoseDots ? 'text-accent' : 'text-white'} />
+            </button>
+
             <button 
               onClick={() => setAutoAssist(!autoAssist)}
-              className={`p-4 rounded-full border transition-all ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
+              className={`p-3 md:p-4 rounded-full border transition-all ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
             >
-              <Target size={24} className={autoAssist ? 'text-accent' : 'text-white'} />
-              <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 min-w-max">
-                <span className="text-[8px] uppercase tracking-widest text-white/50">{autoAssist ? 'Auto-ON' : 'Manual'}</span>
-              </div>
+              <Target size={20} className={autoAssist ? 'text-accent' : 'text-white'} />
             </button>
 
             <button 
               onClick={capturePhoto}
-              className="w-24 h-24 rounded-full border-[6px] border-white p-1.5 hover:scale-105 active:scale-95 transition-all group"
+              className="w-20 h-20 md:w-24 md:h-24 rounded-full border-[4px] md:border-[6px] border-white p-1.5 hover:scale-105 active:scale-95 transition-all group"
             >
               <div className="w-full h-full rounded-full bg-white group-hover:bg-white/90 transition-colors" />
             </button>
 
             <button 
               onClick={toggleCamera}
-              className="p-4 rounded-full border border-white/10 hover:border-white transition-colors"
+              className="p-3 md:p-4 rounded-full border border-white/10 hover:border-white transition-colors"
             >
-              <RotateCcw size={24} className={facingMode === 'user' ? 'rotate-180' : ''} />
+              <RotateCcw size={20} className={facingMode === 'user' ? 'rotate-180' : ''} />
             </button>
           </div>
         </div>
 
-        {/* Right: Info Area */}
-        <div className="text-right space-y-1">
+        {/* Right: Info Area - Stacked on mobile */}
+        <div className="flex md:flex-col items-center justify-end w-full gap-4 md:gap-1 text-right">
           <button 
             onClick={() => setPoseIndex((poseIndex + 1) % poses.length)}
             className="text-right group"

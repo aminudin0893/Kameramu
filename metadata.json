@@ -1,6 +1,6 @@
 {
   "name": "Lumix Pro Camera",
   "description": "Professional-grade camera app with manual controls, background blur, and AI-powered composition guides.",
-  "requestFramePermissions": ["camera"],
+  "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": ["camera"]
 }
