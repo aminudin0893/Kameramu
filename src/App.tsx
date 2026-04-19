@@ -28,7 +28,9 @@ import {
   Palette,
   Compass,
   Home,
-  Monitor
+  Monitor,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -273,6 +275,7 @@ export default function App() {
   const [focusAreaSize, setFocusAreaSize] = useState(25); // 10 to 70
   const [iso, setIso] = useState(1); // 1 to 5
   const [resolution, setResolution] = useState<'HD' | 'UHD'>('UHD');
+  const [uiVisible, setUiVisible] = useState(true);
   
   // AI State
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
@@ -669,6 +672,13 @@ export default function App() {
             <button className="p-1.5 hover:text-white transition-colors" onClick={() => setShowSettings(!showSettings)}>
               <Settings size={18} />
             </button>
+            <button 
+              onClick={() => setUiVisible(!uiVisible)} 
+              className={`p-1.5 transition-colors ${!uiVisible ? 'text-accent' : 'hover:text-white'}`}
+              title={uiVisible ? "Hide UI" : "Show UI"}
+            >
+              {uiVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
           </div>
         </div>
       </div>
@@ -818,33 +828,42 @@ export default function App() {
           )}
 
           {/* Side Panel Overlay (Theme Design) */}
-          <div className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-40 max-h-[85vh] overflow-y-auto overflow-x-hidden no-scrollbar py-4 px-1 pr-2">
-            <button 
-              onClick={() => setShowFilters(!showFilters)}
-              className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showFilters ? 'border-accent' : ''}`}
-            >
-              <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Filter</span>
-              <Palette size={14} className={showFilters ? "text-accent" : "text-white/20"} />
-            </button>
-            <button 
-              onClick={() => setShowLevel(!showLevel)}
-              className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showLevel && Math.abs(tilt.roll) < 2 ? 'border-accent' : ''}`}
-            >
-              <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Level</span>
-              <Compass size={14} className={showLevel ? "text-accent" : "text-white/20"} />
-            </button>
-            <button 
-              onClick={() => setTorchOn(!torchOn)}
-              className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${torchOn ? 'border-accent' : ''}`}
-            >
-              <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Flash</span>
-              {torchOn ? <Zap size={14} className="text-accent" /> : <ZapOff size={14} className="text-white/20" />}
-            </button>
-            <ControlCard label="ISO" value={(iso * 100).toString()} />
-            <ControlCard label="EV" value={exposure > 0 ? `+${exposure/100}` : (exposure/100).toString()} active={exposure !== 0} />
-            <ControlCard label="WB" value={wb >= 0 ? `${5200 + wb*10}K` : `${3200 + wb*10}K`} active={wb !== 0} />
-            <ControlCard label="FCS" value={focus === 0 ? "AF" : (focus/10).toFixed(1)} active={focus !== 0} />
-          </div>
+          <AnimatePresence>
+            {uiVisible && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-40 max-h-[85vh] overflow-y-auto overflow-x-hidden no-scrollbar py-4 px-1 pr-2"
+              >
+                <button 
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showFilters ? 'border-accent' : ''}`}
+                >
+                  <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Filter</span>
+                  <Palette size={14} className={showFilters ? "text-accent" : "text-white/20"} />
+                </button>
+                <button 
+                  onClick={() => setShowLevel(!showLevel)}
+                  className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showLevel && Math.abs(tilt.roll) < 2 ? 'border-accent' : ''}`}
+                >
+                  <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Level</span>
+                  <Compass size={14} className={showLevel ? "text-accent" : "text-white/20"} />
+                </button>
+                <button 
+                  onClick={() => setTorchOn(!torchOn)}
+                  className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${torchOn ? 'border-accent' : ''}`}
+                >
+                  <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Flash</span>
+                  {torchOn ? <Zap size={14} className="text-accent" /> : <ZapOff size={14} className="text-white/20" />}
+                </button>
+                <ControlCard label="ISO" value={(iso * 100).toString()} />
+                <ControlCard label="EV" value={exposure > 0 ? `+${exposure/100}` : (exposure/100).toString()} active={exposure !== 0} />
+                <ControlCard label="WB" value={wb >= 0 ? `${5200 + wb*10}K` : `${3200 + wb*10}K`} active={wb !== 0} />
+                <ControlCard label="FCS" value={focus === 0 ? "AF" : (focus/10).toFixed(1)} active={focus !== 0} />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Viewfinder Overlays */}
           <AnimatePresence>
@@ -1055,7 +1074,10 @@ export default function App() {
       </div>
 
       {/* Bottom Interface - Responsive Grid */}
-      <div className="min-h-[180px] md:h-44 bg-[#111] border-t border-ui-border flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-6 md:px-10 py-4 gap-4 z-30">
+      <motion.div 
+        animate={{ height: uiVisible ? (window.innerWidth < 768 ? 'auto' : 176) : 0, opacity: uiVisible ? 1 : 0 }}
+        className="overflow-hidden bg-[#111] border-t border-ui-border flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-6 md:px-10 py-4 gap-4 z-30"
+      >
         {/* Left: Blur Slider Area - Optimized for mobile visibility */}
         <div className="w-full space-y-3 max-w-[300px] md:max-w-none">
           <div className="flex items-center justify-between text-[10px] font-bold text-text-dim uppercase tracking-wider">
@@ -1162,7 +1184,7 @@ export default function App() {
             </p>
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Gallery Modal / Captured Preview */}
       <AnimatePresence>
