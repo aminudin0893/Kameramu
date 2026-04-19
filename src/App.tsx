@@ -168,6 +168,7 @@ export default function App() {
   const [timemarkManualText, setTimemarkManualText] = useState("");
   const [useManualDate, setUseManualDate] = useState(false);
   const [manualDateValue, setManualDateValue] = useState(new Date().toISOString().split('T')[0]);
+  const [timemarkFontSize, setTimemarkFontSize] = useState(32);
   const [locationText, setLocationText] = useState("Pro Sensor Active");
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
   const [showSettings, setShowSettings] = useState(false);
@@ -476,7 +477,7 @@ export default function App() {
       
       // Burn-in Timemark if enabled
       if (timemarkEnabled) {
-        ctx.font = 'bold 32px "JetBrains Mono", monospace';
+        ctx.font = `bold ${timemarkFontSize}px "JetBrains Mono", monospace`;
         ctx.fillStyle = 'white';
         ctx.shadowBlur = 6;
         ctx.shadowColor = 'black';
@@ -491,16 +492,16 @@ export default function App() {
         let displayLocation = useManualLocation ? manualLocationText : locationText;
         const address = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
         
-        ctx.fillText(timestamp, 40, video.videoHeight - 100);
-        ctx.font = '24px "JetBrains Mono", monospace';
-        ctx.fillText(address, 40, video.videoHeight - 60);
+        ctx.fillText(timestamp, 40, video.videoHeight - (timemarkFontSize * 3.125));
+        ctx.font = `${Math.round(timemarkFontSize * 0.75)}px "JetBrains Mono", monospace`;
+        ctx.fillText(address, 40, video.videoHeight - (timemarkFontSize * 1.875));
       }
 
       setCapturedImage(canvas.toDataURL('image/jpeg', 0.95)); // High Quality
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualLocation, manualLocationText, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
     setAiAnalyzing(true);
@@ -720,6 +721,23 @@ export default function App() {
                       onChange={(e) => setTimemarkManualText(e.target.value)}
                       className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent transition-colors"
                      />
+                     
+                     {/* Font Size Slider */}
+                     <div className="space-y-2 py-1">
+                       <div className="flex justify-between text-[8px] uppercase text-text-dim">
+                         <span>Font Size</span>
+                         <span className="text-white">{timemarkFontSize}px</span>
+                       </div>
+                       <input 
+                         type="range"
+                         min={20}
+                         max={80}
+                         step={2}
+                         value={timemarkFontSize}
+                         onChange={(e) => setTimemarkFontSize(Number(e.target.value))}
+                         className="w-full h-1 bg-white/10 appearance-none rounded-full accent-accent cursor-pointer"
+                       />
+                     </div>
                      
                      {/* Manual Date Toggle */}
                      <div className="flex items-center justify-between py-2 border-t border-white/5">
