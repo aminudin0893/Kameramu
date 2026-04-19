@@ -168,6 +168,8 @@ export default function App() {
   const [timemarkManualText, setTimemarkManualText] = useState("");
   const [useManualDate, setUseManualDate] = useState(false);
   const [manualDateValue, setManualDateValue] = useState(new Date().toISOString().split('T')[0]);
+  const [useManualTime, setUseManualTime] = useState(false);
+  const [manualTimeValue, setManualTimeValue] = useState(new Date().toTimeString().slice(0, 5));
   const [timemarkFontSize, setTimemarkFontSize] = useState(32);
   const [locationText, setLocationText] = useState("Pro Sensor Active");
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
@@ -485,9 +487,17 @@ export default function App() {
         
         // Formatting Indonesian Date
         const daysIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-        const d = useManualDate ? new Date(manualDateValue) : new Date();
+        const d = useManualDate ? new Date(`${manualDateValue}T00:00:00`) : new Date();
         const formattedDate = `${daysIndo[d.getDay()]}, ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-        const timestamp = formattedDate + (useManualDate ? "" : ` • ${new Date().toLocaleTimeString()}`);
+        
+        let timeString = "";
+        if (useManualTime) {
+          timeString = manualTimeValue;
+        } else if (!useManualDate) {
+          timeString = new Date().toLocaleTimeString();
+        }
+        
+        const timestamp = formattedDate + (timeString ? ` • ${timeString}` : "");
         
         let displayLocation = useManualLocation ? manualLocationText : locationText;
         const address = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
@@ -501,7 +511,7 @@ export default function App() {
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualTime, manualTimeValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
     setAiAnalyzing(true);
@@ -755,6 +765,26 @@ export default function App() {
                           type="date"
                           value={manualDateValue}
                           onChange={(e) => setManualDateValue(e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent"
+                        />
+                     )}
+
+                     {/* Manual Time Toggle */}
+                     <div className="flex items-center justify-between py-2 border-t border-white/5">
+                        <span className="text-[9px] text-white/60">Use Manual Time</span>
+                        <button 
+                          onClick={() => setUseManualTime(!useManualTime)}
+                          className={`w-8 h-4 rounded-full relative transition-colors ${useManualTime ? 'bg-accent' : 'bg-white/10'}`}
+                        >
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${useManualTime ? 'translate-x-4' : ''}`} />
+                        </button>
+                     </div>
+
+                     {useManualTime && (
+                        <input 
+                          type="time"
+                          value={manualTimeValue}
+                          onChange={(e) => setManualTimeValue(e.target.value)}
                           className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent"
                         />
                      )}
