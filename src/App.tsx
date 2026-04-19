@@ -721,27 +721,27 @@ export default function App() {
           )}
 
           {/* Side Panel Overlay (Theme Design) */}
-          <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-40">
+          <div className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-40 max-h-[85vh] overflow-y-auto overflow-x-hidden no-scrollbar py-4 px-1 pr-2">
             <button 
               onClick={() => setShowFilters(!showFilters)}
-              className={`bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showFilters ? 'border-accent' : ''}`}
+              className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showFilters ? 'border-accent' : ''}`}
             >
-              <span className="text-[8px] text-text-dim uppercase font-bold tracking-tighter">Filter</span>
-              <Palette size={16} className={showFilters ? "text-accent" : "text-white/20"} />
+              <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Filter</span>
+              <Palette size={14} className={showFilters ? "text-accent" : "text-white/20"} />
             </button>
             <button 
               onClick={() => setShowLevel(!showLevel)}
-              className={`bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showLevel && Math.abs(tilt.roll) < 2 ? 'border-accent' : ''}`}
+              className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${showLevel && Math.abs(tilt.roll) < 2 ? 'border-accent' : ''}`}
             >
-              <span className="text-[8px] text-text-dim uppercase font-bold tracking-tighter">Level</span>
-              <Compass size={16} className={showLevel ? "text-accent" : "text-white/20"} />
+              <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Level</span>
+              <Compass size={14} className={showLevel ? "text-accent" : "text-white/20"} />
             </button>
             <button 
               onClick={() => setTorchOn(!torchOn)}
-              className={`bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${torchOn ? 'border-accent' : ''}`}
+              className={`bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${torchOn ? 'border-accent' : ''}`}
             >
-              <span className="text-[8px] text-text-dim uppercase font-bold tracking-tighter">Flash</span>
-              {torchOn ? <Zap size={16} className="text-accent" /> : <ZapOff size={16} className="text-white/20" />}
+              <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Flash</span>
+              {torchOn ? <Zap size={14} className="text-accent" /> : <ZapOff size={14} className="text-white/20" />}
             </button>
             <ControlCard label="ISO" value={(iso * 100).toString()} />
             <ControlCard label="EV" value={exposure > 0 ? `+${exposure/100}` : (exposure/100).toString()} active={exposure !== 0} />
@@ -1079,9 +1079,9 @@ export default function App() {
 
 function ControlCard({ label, value, active }: { label: string, value: string, active?: boolean }) {
   return (
-    <div className="bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md">
-       <span className="text-[8px] text-text-dim uppercase font-bold tracking-tighter">{label}</span>
-       <span className={`text-[13px] font-mono font-bold leading-none ${active ? 'text-accent' : 'text-white'}`}>
+    <div className="bg-panel p-2 border border-ui-border rounded-xl w-[64px] shrink-0 flex flex-col items-center gap-1 backdrop-blur-md">
+       <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">{label}</span>
+       <span className={`text-[12px] font-mono font-bold leading-none ${active ? 'text-accent' : 'text-white'}`}>
          {value}
        </span>
     </div>
