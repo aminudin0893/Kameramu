@@ -70,59 +70,82 @@ export default function App() {
   // Initialize Camera
   const startCamera = useCallback(async () => {
     setCameraError(null);
-    console.log("Attempting to start camera with facingMode:", facingMode);
+    console.log("System: Starting camera sequence...", facingMode);
     
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("NOT_SUPPORTED");
-      }
+    // 1. Thorough Cleanup
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+    }
 
-      const constraints: MediaStreamConstraints = { 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError("Kamera tidak didukung di browser ini. Gunakan Chrome/Safari di HP Anda.");
+      return;
+    }
+
+    try {
+      // 2. Try with facingMode string directly (often more compatible)
+      const constraints: any = { 
         video: { 
-          facingMode: { ideal: facingMode },
+          facingMode: facingMode,
           width: { ideal: 1280 },
           height: { ideal: 720 }
-        } 
+        },
+        audio: false
       };
       
+      console.log("System: Requesting Camera...", constraints);
       const res = await navigator.mediaDevices.getUserMedia(constraints);
+      
       setStream(res);
       if (videoRef.current) {
-        videoRef.current.srcObject = res;
-        // Explicitly play after setting srcObject
-        try {
-          await videoRef.current.play();
-        } catch (e) {
-          console.warn("Auto-play blocked, waiting for user interaction", e);
-        }
+        const video = videoRef.current;
+        video.srcObject = res;
+        
+        // Use a slight delay to ensure the browser is ready to play
+        setTimeout(async () => {
+          try {
+            await video.play();
+            console.log("System: Camera Active & Playing");
+          } catch (playErr) {
+            console.error("System: Playback blocked", playErr);
+          }
+        }, 100);
       }
     } catch (err: any) {
-      console.warn("Camera init failed:", err);
-      if (err.message === "NOT_SUPPORTED") {
-        setCameraError("Browser ini tidak mendukung akses kamera. Gunakan Chrome/Safari via HTTPS.");
-      } else {
-        // Simple fallback
-        try {
-          const fallbackRes = await navigator.mediaDevices.getUserMedia({ video: true });
-          setStream(fallbackRes);
-          if (videoRef.current) {
-            videoRef.current.srcObject = fallbackRes;
-            await videoRef.current.play();
-          }
-        } catch (fallbackErr: any) {
-          let userMsg = "Gagal memuat kamera.";
-          if (fallbackErr.name === 'NotAllowedError') userMsg = "Izin ditolak. Silakan aktifkan izin kamera di pengaturan browser.";
-          else if (fallbackErr.name === 'NotFoundError') userMsg = "Hardware kamera tidak ditemukan.";
-          setCameraError(`${userMsg} (${fallbackErr.name})`);
+      console.warn("System: Initial attempt failed, trying minimal...", err);
+      
+      try {
+        // 3. Absolute Fallback: Minimal constraints
+        const fallbackRes = await navigator.mediaDevices.getUserMedia({ video: true });
+        setStream(fallbackRes);
+        if (videoRef.current) {
+          const video = videoRef.current;
+          video.srcObject = fallbackRes;
+          setTimeout(() => video.play().catch(e => console.error("Final playback error", e)), 100);
         }
+      } catch (fallbackErr: any) {
+        console.error("System: Critical Failure", fallbackErr);
+        let userMsg = "Gagal memuat kamera.";
+        
+        if (fallbackErr.name === 'NotAllowedError' || fallbackErr.name === 'PermissionDeniedError') {
+          userMsg = "Izin Kamera Ditolak. Harap izinkan akses kamera di pengaturan browser HP Anda.";
+        } else if (fallbackErr.name === 'NotFoundError' || fallbackErr.name === 'DevicesNotFoundError') {
+          userMsg = "Kamera tidak terdeteksi. Pastikan kamera HP Anda tidak sedang digunakan aplikasi lain.";
+        } else if (fallbackErr.name === 'NotReadableError' || fallbackErr.name === 'TrackStartError') {
+          userMsg = "Kamera sedang digunakan oleh aplikasi lain.";
+        }
+        
+        setCameraError(`${userMsg} (${fallbackErr.name})`);
       }
     }
-  }, [facingMode]);
+  }, [facingMode, stream]);
 
   useEffect(() => {
+    // Initial start
     startCamera();
+    
     return () => {
-      // Cleanup tracks on unmount or facingMode change
+      // Cleanup on unmount
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
