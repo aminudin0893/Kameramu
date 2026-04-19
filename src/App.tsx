@@ -210,12 +210,13 @@ export default function App() {
         stream.getTracks().forEach(t => t.stop());
       }
 
-      // 2. Constraints for Rear Camera
+      // 2. Constraints for High Resolution (4K Ideal)
       const constraints: MediaStreamConstraints = { 
         video: { 
           facingMode: { ideal: facingMode }, 
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 3840, min: 1280 },
+          height: { ideal: 2160, min: 720 },
+          frameRate: { ideal: 60 }
         },
         audio: false
       };
@@ -326,7 +327,7 @@ export default function App() {
         ctx.fillText(address, 30, video.videoHeight - 40);
       }
 
-      setCapturedImage(canvas.toDataURL('image/jpeg'));
+      setCapturedImage(canvas.toDataURL('image/jpeg', 0.95)); // High Quality
     }
     
     setTimeout(() => setIsCapturing(false), 300);
@@ -434,7 +435,7 @@ export default function App() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-            <span className="text-white font-bold tracking-tight">4K 60FPS</span>
+            <span className="text-white font-bold tracking-tight">4K ULTRA HD</span>
           </div>
           <span className="opacity-50">RAW+JPG</span>
         </div>
@@ -628,13 +629,13 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
 
-          {/* Portrait Blur Mock */}
+          {/* Portrait Blur Effect - Now driven by focus slider always */}
           <div 
             className="absolute inset-0 pointer-events-none transition-all duration-700"
             style={{ 
-              backdropFilter: mode === 'PORTRAIT' ? `blur(${focus / 5}px)` : 'none',
-              maskImage: mode === 'PORTRAIT' ? 'radial-gradient(circle at center, transparent 30%, black 100%)' : 'none',
-              WebkitMaskImage: mode === 'PORTRAIT' ? 'radial-gradient(circle at center, transparent 30%, black 100%)' : 'none'
+              backdropFilter: focus > 0 ? `blur(${focus / 5}px)` : 'none',
+              maskImage: focus > 0 ? 'radial-gradient(circle at center, transparent 30%, black 100%)' : 'none',
+              WebkitMaskImage: focus > 0 ? 'radial-gradient(circle at center, transparent 30%, black 100%)' : 'none'
             }}
           />
 
@@ -725,23 +726,25 @@ export default function App() {
       </div>
 
       {/* Bottom Interface - Responsive Grid */}
-      <div className="min-h-[140px] md:h-40 bg-[#111] border-t border-ui-border flex flex-col md:grid md:grid-cols-[1fr,2fr,1fr] items-center px-6 md:px-10 py-4 gap-4 md:gap-8 z-30">
-        {/* Left: Blur Slider Area - Hidden on small mobile to save space */}
-        <div className="hidden md:block w-full space-y-3">
+      <div className="min-h-[180px] md:h-44 bg-[#111] border-t border-ui-border flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-6 md:px-10 py-4 gap-4 z-30">
+        {/* Left: Blur Slider Area - Optimized for mobile visibility */}
+        <div className="w-full space-y-3 max-w-[300px] md:max-w-none">
           <div className="flex items-center justify-between text-[10px] font-bold text-text-dim uppercase tracking-wider">
-            <span>Aperture Blur</span>
-            <span className="text-white italic">f/1.8</span>
+            <div className="flex items-center gap-2">
+              <Sun size={12} className="text-accent" />
+              <span>Background Blur</span>
+            </div>
+            <span className="text-white italic">{focus === 0 ? "OFF" : `f/${(22 - focus/5).toFixed(1)}`}</span>
           </div>
-          <div className="relative group flex items-center">
+          <div className="relative group flex items-center h-8">
             <input 
               type="range" 
               min={0} 
               max={100} 
               value={focus} 
               onChange={(e) => setFocus(Number(e.target.value))}
-              className="w-full h-1 bg-[#333] appearance-none rounded-full accent-accent cursor-pointer"
+              className="w-full h-1.5 bg-[#333] appearance-none rounded-full accent-accent cursor-pointer"
             />
-            {/* Custom thumb look is limited in standard range input without heavy CSS, so using standard accent-accent */}
           </div>
         </div>
 
