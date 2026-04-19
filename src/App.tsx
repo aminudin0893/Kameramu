@@ -57,10 +57,13 @@ interface FilterPreset {
 
 const FILTER_PRESETS: FilterPreset[] = [
   { id: 'standard', name: 'Standard', css: '', icon: 'Standard' },
-  { id: 'vivid', name: 'Vivid', css: 'saturate(1.5) contrast(1.1) brightness(1.05)', icon: 'Vibrant' },
-  { id: 'fresh', name: 'Fresh', css: 'brightness(1.1) saturate(1.2) hue-rotate(-5deg) contrast(1.05)', icon: 'Clear' },
-  { id: 'cinematic', name: 'Cinematic', css: 'contrast(1.2) saturate(0.8) sepia(0.2) hue-rotate(5deg)', icon: 'Cinema' },
-  { id: 'mono', name: 'Mono', css: 'grayscale(1) contrast(1.3) brightness(1.1)', icon: 'B&W' },
+  { id: 'vivid', name: 'Vivid', css: 'saturate(1.4) contrast(1.1) brightness(1.05)', icon: 'Vibrant' },
+  { id: 'fresh', name: 'Fresh', css: 'brightness(1.1) saturate(1.1) hue-rotate(-5deg) contrast(1.05) sepia(0.05)', icon: 'Clear' },
+  { id: 'cinematic', name: 'Cinematic', css: 'contrast(1.2) saturate(0.85) sepia(0.2) hue-rotate(5deg)', icon: 'Cinema' },
+  { id: 'vintage', name: 'Vintage', css: 'sepia(0.35) contrast(0.85) brightness(1.1) saturate(0.7) hue-rotate(-10deg)', icon: 'Retro' },
+  { id: 'noir', name: 'Noir', css: 'grayscale(1) contrast(1.7) brightness(0.85)', icon: 'Deep B&W' },
+  { id: 'lomo', name: 'Lomo', css: 'contrast(1.4) saturate(1.6) brightness(0.9) hue-rotate(10deg) sepia(0.1)', icon: 'Hipster' },
+  { id: 'dreamy', name: 'Dreamy', css: 'brightness(1.15) saturate(0.8) blur(0.4px) contrast(0.85) opacity(0.95)', icon: 'Soft' },
 ];
 
 // Dot-based pose silhouettes (coordinates from 0-100)
@@ -259,7 +262,8 @@ export default function App() {
   const [aiFeedback, setAiFeedback] = useState<{ 
     objects: string[], 
     tips: string[], 
-    pose?: string 
+    pose?: string,
+    recommended_filter_id?: string
   } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -392,19 +396,43 @@ export default function App() {
         ctx.filter = blurredFilters;
         ctx.drawImage(video, 0, 0);
         
-        // 2. Overlay sharp subject using a soft radial clipping
-        ctx.save();
+        // 2. Overlay sharp subject using a soft radial clipping mask for smooth transition
         const fX = (focusPoint.x / 100) * video.videoWidth;
         const fY = (focusPoint.y / 100) * video.videoHeight;
-        const radius = Math.min(video.videoWidth, video.videoHeight) * 0.2;
+        const innerRadius = Math.min(video.videoWidth, video.videoHeight) * 0.15;
+        const outerRadius = Math.min(video.videoWidth, video.videoHeight) * 0.45;
         
-        ctx.beginPath();
-        ctx.arc(fX, fY, radius, 0, Math.PI * 2);
-        ctx.clip();
-        
-        ctx.filter = sharpFilters;
-        ctx.drawImage(video, 0, 0);
-        ctx.restore();
+        ctx.save();
+        // Create a radial gradient for the mask
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = video.videoWidth;
+        maskCanvas.height = video.videoHeight;
+        const mctx = maskCanvas.getContext('2d');
+        if (mctx) {
+          const gradient = mctx.createRadialGradient(fX, fY, innerRadius, fX, fY, outerRadius);
+          gradient.addColorStop(0, 'white');
+          gradient.addColorStop(1, 'transparent');
+          mctx.fillStyle = gradient;
+          mctx.fillRect(0, 0, video.videoWidth, video.videoHeight);
+          
+          // Use the gradient mask to draw the sharp version
+          ctx.globalCompositeOperation = 'destination-in';
+          // This is tricky in a single canvas pass, better strategy:
+          // Draw sharp image on a temporary canvas, apply mask, then draw that on main ctx
+          const sharpCanvas = document.createElement('canvas');
+          sharpCanvas.width = video.videoWidth;
+          sharpCanvas.height = video.videoHeight;
+          const sctx = sharpCanvas.getContext('2d');
+          if (sctx) {
+            sctx.filter = sharpFilters;
+            sctx.drawImage(video, 0, 0);
+            sctx.globalCompositeOperation = 'destination-in';
+            sctx.drawImage(maskCanvas, 0, 0);
+            
+            ctx.restore(); // restore to blurred state
+            ctx.drawImage(sharpCanvas, 0, 0);
+          }
+        }
       } else {
         // Standard draw no blur
         ctx.filter = sharpFilters;
@@ -462,16 +490,21 @@ export default function App() {
           {
             parts: [
               { text: `Analyze this camera view. Identify main objects and provide professional photography tips.
-                       CRITICAL: If a person is the subject and their pose or position is sub-optimal for the current background/composition:
-                       1. Set "pose_score" (1-10) where < 7 means a better pose is needed.
-                       2. Set "recommended_pose_id" to 0 (Standing), 1 (S-Curve), or 2 (Fashion Lean) based on what fits the scene best.
+                       Presets available: standard, vivid, fresh, cinematic, vintage, noir, lomo, dreamy.
+                       
+                       CRITICAL:
+                       1. Recommend the best filter ID from the list above based on colors and lighting.
+                       2. If a person is the subject and their pose is sub-optimal:
+                          - Set "pose_score" (1-10) where < 7 means a better pose is needed.
+                          - Set "recommended_pose_id" to 0 (Standing), 1 (S-Curve), or 2 (Fashion Lean).
                        
                        Return JSON strictly: { 
                          "objects": [], 
                          "tips": [], 
                          "pose": "string description",
                          "pose_score": number,
-                         "recommended_pose_id": number | null
+                         "recommended_pose_id": number | null,
+                         "recommended_filter_id": "string"
                        }` },
               { inlineData: { mimeType: "image/jpeg", data: base64Image } }
             ]
@@ -520,7 +553,7 @@ export default function App() {
             </p>
           </div>
           
-          <div className="pt-6">
+          <div className="pt-6 flex flex-col items-center gap-4">
             <button 
               onClick={async () => {
                 // Request orientation permission for iOS
@@ -538,8 +571,23 @@ export default function App() {
               <span>Mulai Fotografi</span>
               <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </button>
-            <p className="mt-8 text-[10px] text-text-dim font-mono tracking-widest opacity-30">
-              OPTIMIZED FOR MOBILE HP • VER 2.1.0
+
+            <button 
+              onClick={() => {
+                if (document.fullscreenElement) {
+                  document.exitFullscreen();
+                } else {
+                  document.documentElement.requestFullscreen();
+                }
+              }}
+              className="flex items-center gap-2 text-white/40 hover:text-white transition-colors text-[10px] uppercase font-bold tracking-widest"
+            >
+              <Maximize size={14} />
+              <span>Full Screen</span>
+            </button>
+
+            <p className="mt-4 text-[10px] text-text-dim font-mono tracking-widest opacity-30">
+              OPTIMIZED FOR MOBILE HP • VER 2.2.0
             </p>
           </div>
         </div>
@@ -568,19 +616,6 @@ export default function App() {
              <span className="text-white">85%</span>
           </div>
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => {
-                if (document.fullscreenElement) {
-                  document.exitFullscreen();
-                } else {
-                  document.documentElement.requestFullscreen();
-                }
-              }}
-              className="p-1.5 hover:text-white transition-colors" 
-              title="Fullscreen"
-            >
-              <Maximize size={18} />
-            </button>
             <button 
               onClick={() => {
                 setHasStarted(false);
@@ -865,8 +900,8 @@ export default function App() {
             className="absolute inset-0 pointer-events-none transition-all duration-700"
             style={{ 
               backdropFilter: focus > 0 ? `blur(${focus / 5}px)` : 'none',
-              maskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 20%, black 60%)` : 'none',
-              WebkitMaskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 20%, black 60%)` : 'none'
+              maskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 15%, black 75%)` : 'none',
+              WebkitMaskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 15%, black 75%)` : 'none'
             }}
           />
 
@@ -941,6 +976,26 @@ export default function App() {
                         <p className="text-[10px] text-white font-medium italic">
                           "{aiFeedback.pose}"
                         </p>
+                      </div>
+                    )}
+
+                    {aiFeedback.recommended_filter_id && (
+                      <div className="pt-2 border-t border-white/5">
+                        <span className="text-[8px] text-white/40 uppercase tracking-widest block mb-1">Recommended Filter</span>
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                          <p className="text-[10px] text-accent font-bold uppercase">
+                            {FILTER_PRESETS.find(f => f.id === aiFeedback.recommended_filter_id)?.name || "Recommended"}
+                          </p>
+                          <button 
+                            onClick={() => {
+                              const filter = FILTER_PRESETS.find(f => f.id === aiFeedback.recommended_filter_id);
+                              if (filter) setActiveFilter(filter);
+                            }}
+                            className="bg-accent px-2 py-1 rounded text-[8px] font-bold text-white uppercase hover:bg-accent/80 transition-colors"
+                          >
+                            Apply
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
