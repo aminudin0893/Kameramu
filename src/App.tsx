@@ -16,6 +16,7 @@ import {
   Sparkles,
   Info,
   ChevronRight,
+  ChevronDown,
   Maximize,
   Download,
   X,
@@ -271,6 +272,7 @@ export default function App() {
   const [focus, setFocus] = useState(0); // 0 to 100
   const [focusAreaSize, setFocusAreaSize] = useState(25); // 10 to 70
   const [iso, setIso] = useState(1); // 1 to 5
+  const [resolution, setResolution] = useState<'HD' | 'UHD'>('UHD');
   
   // AI State
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
@@ -301,12 +303,17 @@ export default function App() {
         stream.getTracks().forEach(t => t.stop());
       }
 
-      // 2. Constraints for High Resolution (4K Ideal)
+      // 2. Constraints for Selected Resolution
+      const resSettings = {
+        HD: { w: 1920, h: 1080 },
+        UHD: { w: 3840, h: 2160 }
+      };
+      
       const constraints: MediaStreamConstraints = { 
         video: { 
           facingMode: { ideal: facingMode }, 
-          width: { ideal: 3840, min: 1280 },
-          height: { ideal: 2160, min: 720 },
+          width: { ideal: resSettings[resolution].w, min: 1280 },
+          height: { ideal: resSettings[resolution].h, min: 720 },
           frameRate: { ideal: 60 }
         },
         audio: false
@@ -358,7 +365,7 @@ export default function App() {
     return () => {
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
-  }, [facingMode, hasStarted]);
+  }, [facingMode, hasStarted, resolution]);
 
   // Handle Torch
   useEffect(() => {
@@ -418,7 +425,9 @@ export default function App() {
         ctx.drawImage(video, 0, 0);
         
         // 2. Overlay sharp subject using a soft radial clipping mask for smooth transition
-        const fX = (focusPoint.x / 100) * video.videoWidth;
+        // Flip X coordinate for masking if camera is mirrored (front camera)
+        const effectiveX = facingMode === 'user' ? (100 - focusPoint.x) : focusPoint.x;
+        const fX = (effectiveX / 100) * video.videoWidth;
         const fY = (focusPoint.y / 100) * video.videoHeight;
         const innerRadius = Math.min(video.videoWidth, video.videoHeight) * (focusAreaSize / 100);
         const outerRadius = Math.min(video.videoWidth, video.videoHeight) * ((focusAreaSize + 30) / 100);
@@ -436,9 +445,6 @@ export default function App() {
           mctx.fillStyle = gradient;
           mctx.fillRect(0, 0, video.videoWidth, video.videoHeight);
           
-          // Use the gradient mask to draw the sharp version
-          ctx.globalCompositeOperation = 'destination-in';
-          // This is tricky in a single canvas pass, better strategy:
           // Draw sharp image on a temporary canvas, apply mask, then draw that on main ctx
           const sharpCanvas = document.createElement('canvas');
           sharpCanvas.width = video.videoWidth;
@@ -451,7 +457,8 @@ export default function App() {
             sctx.drawImage(maskCanvas, 0, 0);
             
             ctx.restore(); 
-            ctx.filter = 'none'; // CRITICAL: Reset filter so sharp subject isn't drawn blurred
+            ctx.filter = 'none'; 
+            ctx.globalCompositeOperation = 'source-over'; // Ensure we draw sharp over blurred
             ctx.drawImage(sharpCanvas, 0, 0);
           }
         }
@@ -621,7 +628,14 @@ export default function App() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-            <span className="text-white font-bold tracking-tight">4K ULTRA HD</span>
+            <button 
+              onClick={() => setResolution(resolution === 'UHD' ? 'HD' : 'UHD')}
+              className="text-white font-bold tracking-tight hover:text-accent transition-colors flex items-center gap-1 group"
+              title="Change Resolution"
+            >
+              <span>{resolution === 'UHD' ? '4K ULTRA HD' : '1080P FULL HD'}</span>
+              <ChevronDown size={12} className="opacity-30 group-hover:opacity-100 transition-opacity" />
+            </button>
           </div>
           <span className="opacity-50">RAW+JPG</span>
         </div>
@@ -645,6 +659,9 @@ export default function App() {
               title="Home"
             >
               <Home size={18} />
+            </button>
+            <button onClick={toggleFullscreen} className="p-1.5 hover:text-white transition-colors" title="Full Screen">
+              <Maximize size={18} />
             </button>
             <button onClick={() => setShowGrid(!showGrid)} className={`p-1.5 transition-colors ${showGrid ? 'text-accent' : 'hover:text-white'}`}>
               <Grid3X3 size={18} />
