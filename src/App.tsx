@@ -68,63 +68,64 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Initialize Camera
-  useEffect(() => {
-    let activeStream: MediaStream | null = null;
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    console.log("Attempting to start camera with facingMode:", facingMode);
     
-    async function startCamera() {
-      setCameraError(null);
-      // Stop old tracks first
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
-      
+    try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError("Browser tidak mendukung akses kamera. Gunakan Chrome/Safari terbaru via HTTPS.");
-        return;
+        throw new Error("NOT_SUPPORTED");
       }
 
-      try {
-        const constraints: MediaStreamConstraints = { 
-          video: { 
-            facingMode: facingMode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          } 
-        };
-        
-        const res = await navigator.mediaDevices.getUserMedia(constraints);
-        activeStream = res;
-        setStream(res);
-        if (videoRef.current) {
-          videoRef.current.srcObject = res;
-          videoRef.current.play().catch(e => console.error("Playback failed", e));
-        }
-      } catch (err: any) {
-        console.warn("Retrying with minimal constraints...", err);
+      const constraints: MediaStreamConstraints = { 
+        video: { 
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      };
+      
+      const res = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(res);
+      if (videoRef.current) {
+        videoRef.current.srcObject = res;
+        // Explicitly play after setting srcObject
         try {
-          // Fallback minimal
+          await videoRef.current.play();
+        } catch (e) {
+          console.warn("Auto-play blocked, waiting for user interaction", e);
+        }
+      }
+    } catch (err: any) {
+      console.warn("Camera init failed:", err);
+      if (err.message === "NOT_SUPPORTED") {
+        setCameraError("Browser ini tidak mendukung akses kamera. Gunakan Chrome/Safari via HTTPS.");
+      } else {
+        // Simple fallback
+        try {
           const fallbackRes = await navigator.mediaDevices.getUserMedia({ video: true });
-          activeStream = fallbackRes;
           setStream(fallbackRes);
           if (videoRef.current) {
             videoRef.current.srcObject = fallbackRes;
-            videoRef.current.play().catch(e => console.error("Playback failed", e));
+            await videoRef.current.play();
           }
         } catch (fallbackErr: any) {
-          console.error("All camera fallbacks failed", fallbackErr);
-          let userMsg = "Gagal mengakses kamera.";
-          if (fallbackErr.name === 'NotAllowedError') userMsg = "Izin kamera ditolak. Silakan cek pengaturan browser Anda.";
-          if (fallbackErr.name === 'NotFoundError') userMsg = "Hardware kamera tidak ditemukan.";
-          if (window.location.protocol !== 'https:') userMsg = "Kamera butuh HTTPS. Gunakan URL https://.";
-          
-          setCameraError(`${userMsg} (Error: ${fallbackErr.name})`);
+          let userMsg = "Gagal memuat kamera.";
+          if (fallbackErr.name === 'NotAllowedError') userMsg = "Izin ditolak. Silakan aktifkan izin kamera di pengaturan browser.";
+          else if (fallbackErr.name === 'NotFoundError') userMsg = "Hardware kamera tidak ditemukan.";
+          setCameraError(`${userMsg} (${fallbackErr.name})`);
         }
       }
     }
-    
+  }, [facingMode]);
+
+  useEffect(() => {
     startCamera();
     return () => {
-      activeStream?.getTracks().forEach(t => t.stop());
+      // Cleanup tracks on unmount or facingMode change
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
     };
   }, [facingMode]);
 
@@ -269,9 +270,18 @@ export default function App() {
               </button>
             </div>
           ) : !stream ? (
-            <div className="flex flex-col items-center gap-4 animate-pulse">
+            <div className="flex flex-col items-center gap-6 z-50">
               <div className="w-16 h-16 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-              <span className="text-[10px] uppercase tracking-widest text-accent">Initializing Sensor...</span>
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-accent font-bold">Initializing Sensor...</span>
+                <p className="text-[9px] text-text-dim text-center px-8">Jika kamera tidak muncul, klik tombol di bawah untuk meminta izin ulang.</p>
+              </div>
+              <button 
+                onClick={startCamera}
+                className="px-6 py-2 bg-white text-black text-[10px] font-bold uppercase tracking-tighter hover:bg-white/90"
+              >
+                Aktifkan Kamera
+              </button>
             </div>
           ) : (
             <video 
