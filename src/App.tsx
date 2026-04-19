@@ -132,6 +132,21 @@ export default function App() {
   const [locationText, setLocationText] = useState("Pro Sensor Active");
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
   const [showSettings, setShowSettings] = useState(false);
+  const [focusPoint, setFocusPoint] = useState({ x: 50, y: 50 }); // Percentage
+  const [showFocusRing, setShowFocusRing] = useState(false);
+
+  const handleViewfinderTap = (e: React.MouseEvent | React.TouchEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+    
+    setFocusPoint({ x, y });
+    setShowFocusRing(true);
+    setTimeout(() => setShowFocusRing(false), 800);
+  };
 
   // Update time every second
   useEffect(() => {
@@ -311,13 +326,36 @@ export default function App() {
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
-      // Apply filters to capture (matching the viewfinder)
-      // Note: We use a simplified global blur if focus > 0 to ensure settings are burned in
+      // Selective Blur Logic
       const blurVal = focus > 0 ? focus / 4 : 0; 
-      const filters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10}) blur(${blurVal}px)`;
-      ctx.filter = filters;
+      const sharpFilters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10})`;
+      const blurredFilters = `${sharpFilters} blur(${blurVal}px)`;
       
-      ctx.drawImage(video, 0, 0);
+      if (blurVal > 0) {
+        // 1. Draw blurred version everywhere
+        ctx.filter = blurredFilters;
+        ctx.drawImage(video, 0, 0);
+        
+        // 2. Overlay sharp subject using a soft radial clipping
+        ctx.save();
+        const fX = (focusPoint.x / 100) * video.videoWidth;
+        const fY = (focusPoint.y / 100) * video.videoHeight;
+        const radius = Math.min(video.videoWidth, video.videoHeight) * 0.2;
+        
+        // Smooth transition: draw multiple layers or use a gradient mask?
+        // Simple circular clip for now to ensure performance
+        ctx.beginPath();
+        ctx.arc(fX, fY, radius, 0, Math.PI * 2);
+        ctx.clip();
+        
+        ctx.filter = sharpFilters;
+        ctx.drawImage(video, 0, 0);
+        ctx.restore();
+      } else {
+        // Standard draw no blur
+        ctx.filter = sharpFilters;
+        ctx.drawImage(video, 0, 0);
+      }
       
       // Reset filter for Timemark text overlay
       ctx.filter = 'none';
@@ -347,7 +385,7 @@ export default function App() {
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus]);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus, focusPoint]);
 
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
@@ -561,7 +599,24 @@ export default function App() {
 
       {/* Main Viewfinder Section */}
       <div className="relative flex-1 bg-black overflow-hidden flex items-center justify-center p-2 sm:p-3">
-        <div className="relative w-full h-full rounded-sm overflow-hidden border-[1px] md:border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900">
+        <div 
+          onClick={handleViewfinderTap}
+          className="relative w-full h-full rounded-sm overflow-hidden border-[1px] md:border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900 cursor-crosshair"
+        >
+          {/* Tap-to-Focus Ring */}
+          <AnimatePresence>
+            {showFocusRing && (
+              <motion.div 
+                initial={{ scale: 2, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{ left: `${focusPoint.x}%`, top: `${focusPoint.y}%` }}
+                className="absolute w-16 h-16 border-2 border-accent rounded-full -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none"
+              >
+                <div className="absolute inset-0 border border-accent/30 rounded-full animate-ping" />
+              </motion.div>
+            )}
+          </AnimatePresence>
           {cameraError ? (
             <div className="text-center p-8 space-y-4 z-50">
               <Camera size={48} className="mx-auto text-accent mb-4 opacity-50" />
@@ -666,13 +721,13 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
 
-          {/* Portrait Blur Effect - Now driven by focus slider always */}
+          {/* Portrait Blur Effect - Now driven by focus slider and tap point */}
           <div 
             className="absolute inset-0 pointer-events-none transition-all duration-700"
             style={{ 
               backdropFilter: focus > 0 ? `blur(${focus / 5}px)` : 'none',
-              maskImage: focus > 0 ? 'radial-gradient(circle at center, transparent 30%, black 100%)' : 'none',
-              WebkitMaskImage: focus > 0 ? 'radial-gradient(circle at center, transparent 30%, black 100%)' : 'none'
+              maskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 20%, black 60%)` : 'none',
+              WebkitMaskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 20%, black 60%)` : 'none'
             }}
           />
 
