@@ -269,6 +269,7 @@ export default function App() {
   const [exposure, setExposure] = useState(0);
   const [wb, setWb] = useState(0); // -100 to 100
   const [focus, setFocus] = useState(0); // 0 to 100
+  const [focusAreaSize, setFocusAreaSize] = useState(25); // 10 to 70
   const [iso, setIso] = useState(1); // 1 to 5
   
   // AI State
@@ -419,8 +420,8 @@ export default function App() {
         // 2. Overlay sharp subject using a soft radial clipping mask for smooth transition
         const fX = (focusPoint.x / 100) * video.videoWidth;
         const fY = (focusPoint.y / 100) * video.videoHeight;
-        const innerRadius = Math.min(video.videoWidth, video.videoHeight) * 0.15;
-        const outerRadius = Math.min(video.videoWidth, video.videoHeight) * 0.45;
+        const innerRadius = Math.min(video.videoWidth, video.videoHeight) * (focusAreaSize / 100);
+        const outerRadius = Math.min(video.videoWidth, video.videoHeight) * ((focusAreaSize + 30) / 100);
         
         ctx.save();
         // Create a radial gradient for the mask
@@ -488,7 +489,7 @@ export default function App() {
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus, focusPoint, activeFilter]);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
 
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
@@ -918,8 +919,8 @@ export default function App() {
             className="absolute inset-0 pointer-events-none transition-all duration-700"
             style={{ 
               backdropFilter: focus > 0 ? `blur(${focus / 5}px)` : 'none',
-              maskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 15%, black 75%)` : 'none',
-              WebkitMaskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent 15%, black 75%)` : 'none'
+              maskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent ${focusAreaSize}%, black ${focusAreaSize + 40}%)` : 'none',
+              WebkitMaskImage: focus > 0 ? `radial-gradient(circle at ${focusPoint.x}% ${focusPoint.y}%, transparent ${focusAreaSize}%, black ${focusAreaSize + 40}%)` : 'none'
             }}
           />
 
@@ -1057,6 +1058,27 @@ export default function App() {
               className="w-full h-1.5 bg-[#333] appearance-none rounded-full accent-accent cursor-pointer"
             />
           </div>
+
+          {/* Subject Size Control */}
+          {focus > 0 && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300 pb-2">
+               <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
+                <div className="flex items-center gap-2">
+                  <Maximize size={10} className="text-accent" />
+                  <span>Subject Focus Area</span>
+                </div>
+                <span className="text-white italic">{focusAreaSize}%</span>
+              </div>
+              <input 
+                type="range" 
+                min={10} 
+                max={70} 
+                value={focusAreaSize} 
+                onChange={(e) => setFocusAreaSize(Number(e.target.value))}
+                className="w-full h-1 bg-[#222] appearance-none rounded-full accent-accent cursor-pointer"
+              />
+            </div>
+          )}
         </div>
 
         {/* Center: Modes + Shutter */}
