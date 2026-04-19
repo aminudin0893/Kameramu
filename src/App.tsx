@@ -627,31 +627,31 @@ export default function App() {
   return (
     <div className="fixed inset-0 bg-bg flex flex-col font-sans text-text-dim selection:bg-accent/30">
       {/* Top Bar - Recalibrated for Prof. Polish */}
-      <div className="h-14 flex items-center justify-between px-8 bg-black z-30 font-mono text-[12px] border-b border-ui-border">
-        <div className="flex items-center gap-6">
+      <div className="h-14 flex items-center justify-between px-4 md:px-8 bg-black z-30 font-mono text-[10px] md:text-[12px] border-b border-ui-border">
+        <div className="flex items-center gap-3 md:gap-6">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+            <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-accent animate-pulse" />
             <button 
               onClick={() => setResolution(resolution === 'UHD' ? 'HD' : 'UHD')}
-              className="text-white font-bold tracking-tight hover:text-accent transition-colors flex items-center gap-1 group"
+              className="text-white font-bold tracking-tight hover:text-accent transition-colors flex items-center gap-1 group whitespace-nowrap"
               title="Change Resolution"
             >
-              <span>{resolution === 'UHD' ? '4K ULTRA HD' : '1080P FULL HD'}</span>
+              <span>{resolution === 'UHD' ? '4K UHD' : '1080P HD'}</span>
               <ChevronDown size={12} className="opacity-30 group-hover:opacity-100 transition-opacity" />
             </button>
           </div>
-          <span className="opacity-50">RAW+JPG</span>
+          <span className="opacity-50 hidden sm:block">RAW+JPG</span>
         </div>
         
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4 md:gap-8 overflow-x-auto no-scrollbar">
+          <div className="items-center gap-3 hidden md:flex">
              <span className="opacity-50">STABILIZATION: ON</span>
              <div className="w-8 h-4 border border-white/30 p-[1px] relative">
                <div className="h-full bg-emerald-500 w-[85%]" />
              </div>
              <span className="text-white">85%</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <button 
               onClick={() => {
                 setHasStarted(false);
@@ -661,23 +661,23 @@ export default function App() {
               className="p-1.5 hover:text-white transition-colors" 
               title="Home"
             >
-              <Home size={18} />
+              <Home size={16} className="md:w-[18px] md:h-[18px]" />
             </button>
             <button onClick={toggleFullscreen} className="p-1.5 hover:text-white transition-colors" title="Full Screen">
-              <Maximize size={18} />
+              <Maximize size={16} className="md:w-[18px] md:h-[18px]" />
             </button>
             <button onClick={() => setShowGrid(!showGrid)} className={`p-1.5 transition-colors ${showGrid ? 'text-accent' : 'hover:text-white'}`}>
-              <Grid3X3 size={18} />
+              <Grid3X3 size={16} className="md:w-[18px] md:h-[18px]" />
             </button>
             <button className="p-1.5 hover:text-white transition-colors" onClick={() => setShowSettings(!showSettings)}>
-              <Settings size={18} />
+              <Settings size={16} className="md:w-[18px] md:h-[18px]" />
             </button>
             <button 
               onClick={() => setUiVisible(!uiVisible)} 
               className={`p-1.5 transition-colors ${!uiVisible ? 'text-accent' : 'hover:text-white'}`}
               title={uiVisible ? "Hide UI" : "Show UI"}
             >
-              {uiVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+              {uiVisible ? <Eye size={16} className="md:w-[18px] md:h-[18px]" /> : <EyeOff size={16} className="md:w-[18px] md:h-[18px]" />}
             </button>
           </div>
         </div>
