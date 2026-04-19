@@ -18,7 +18,9 @@ import {
   ChevronRight,
   Maximize,
   Download,
-  X
+  X,
+  Zap,
+  ZapOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -37,6 +39,8 @@ export default function App() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [poseIndex, setPoseIndex] = useState(0);
+  const [torchOn, setTorchOn] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   
   const poses = [
     { name: "Neutral", shape: "rounded-[40%]" },
@@ -65,31 +69,55 @@ export default function App() {
 
   // Initialize Camera
   useEffect(() => {
+    let activeStream: MediaStream | null = null;
+    
     async function startCamera() {
+      setCameraError(null);
       // Stop old tracks first
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
       }
       
       try {
-        const res = await navigator.mediaDevices.getUserMedia({ 
+        const constraints: MediaStreamConstraints = { 
           video: { 
             facingMode: facingMode,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           } 
-        });
+        };
+        
+        const res = await navigator.mediaDevices.getUserMedia(constraints);
+        activeStream = res;
         setStream(res);
         if (videoRef.current) {
           videoRef.current.srcObject = res;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Camera access denied", err);
+        setCameraError(err.message || "Could not access camera. Please ensure permissions are granted and you are using HTTPS.");
       }
     }
+    
     startCamera();
-    return () => stream?.getTracks().forEach(t => t.stop());
+    return () => {
+      activeStream?.getTracks().forEach(t => t.stop());
+    };
   }, [facingMode]);
+
+  // Handle Torch
+  useEffect(() => {
+    if (!stream) return;
+    const track = stream.getVideoTracks()[0];
+    if (track && 'applyConstraints' in track) {
+      const capabilities = track.getCapabilities() as any;
+      if (capabilities.torch) {
+        track.applyConstraints({
+          advanced: [{ torch: torchOn } as any]
+        }).catch(err => console.error("Torch error:", err));
+      }
+    }
+  }, [torchOn, stream]);
 
   // Handle Auto-Assist
   useEffect(() => {
@@ -204,21 +232,42 @@ export default function App() {
 
       {/* Main Viewfinder Section */}
       <div className="relative flex-1 bg-black overflow-hidden flex items-center justify-center p-3">
-        <div className="relative w-full h-full rounded-sm overflow-hidden border-[12px] border-[#1a1a1a] shadow-inner">
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted
-            className="w-full h-full object-cover transition-all"
-            style={{ 
-              filter: cameraFilters,
-              WebkitFilter: cameraFilters,
-            }}
-          />
+        <div className="relative w-full h-full rounded-sm overflow-hidden border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900">
+          {cameraError ? (
+            <div className="text-center p-8 space-y-4 z-50">
+              <Camera size={48} className="mx-auto text-accent mb-4 opacity-50" />
+              <p className="text-white text-sm font-bold uppercase tracking-widest">Camera Error</p>
+              <p className="text-text-dim text-xs max-w-xs leading-relaxed">{cameraError}</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-4 px-6 py-2 bg-accent text-white text-[10px] font-bold uppercase tracking-tighter hover:scale-105 transition-transform"
+              >
+                Retry Connection
+              </button>
+            </div>
+          ) : (
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted
+              className="w-full h-full object-cover transition-all"
+              style={{ 
+                filter: cameraFilters,
+                WebkitFilter: cameraFilters,
+              }}
+            />
+          )}
 
           {/* Side Panel Overlay (Theme Design) */}
           <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-40">
+            <button 
+              onClick={() => setTorchOn(!torchOn)}
+              className={`bg-panel p-3 border border-ui-border rounded-xl w-[70px] flex flex-col items-center gap-1 backdrop-blur-md transition-colors ${torchOn ? 'border-accent' : ''}`}
+            >
+              <span className="text-[8px] text-text-dim uppercase font-bold tracking-tighter">Flash</span>
+              {torchOn ? <Zap size={16} className="text-accent" /> : <ZapOff size={16} className="text-white/20" />}
+            </button>
             <ControlCard label="ISO" value={(iso * 100).toString()} />
             <ControlCard label="EV" value={exposure > 0 ? `+${exposure/100}` : (exposure/100).toString()} active={exposure !== 0} />
             <ControlCard label="WB" value={wb >= 0 ? `${5200 + wb*10}K` : `${3200 + wb*10}K`} active={wb !== 0} />
