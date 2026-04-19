@@ -171,6 +171,8 @@ export default function App() {
   const [locationText, setLocationText] = useState("Pro Sensor Active");
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
   const [showSettings, setShowSettings] = useState(false);
+  const [useManualLocation, setUseManualLocation] = useState(false);
+  const [manualLocationText, setManualLocationText] = useState("");
   const [focusPoint, setFocusPoint] = useState({ x: 50, y: 50 }); // Percentage
   const [showFocusRing, setShowFocusRing] = useState(false);
   
@@ -242,10 +244,8 @@ export default function App() {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
           const data = await res.json();
           // Extract more readable address
-          const city = data.address.city || data.address.town || data.address.village || "";
-          const county = data.address.county || "";
-          const addr = city ? `${city}, ${county}` : `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-          setLocationText(addr);
+          const address = data.display_name || "";
+          setLocationText(address);
         } catch {
           setLocationText(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         }
@@ -488,7 +488,8 @@ export default function App() {
         const formattedDate = `${daysIndo[d.getDay()]}, ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
         const timestamp = formattedDate + (useManualDate ? "" : ` • ${new Date().toLocaleTimeString()}`);
         
-        const address = timemarkManualText ? `${timemarkManualText} • ${locationText}` : locationText;
+        let displayLocation = useManualLocation ? manualLocationText : locationText;
+        const address = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
         
         ctx.fillText(timestamp, 40, video.videoHeight - 100);
         ctx.font = '24px "JetBrains Mono", monospace';
@@ -499,8 +500,7 @@ export default function App() {
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
-
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualLocation, manualLocationText, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
     setAiAnalyzing(true);
@@ -741,10 +741,30 @@ export default function App() {
                         />
                      )}
 
-                     <div className="flex items-center gap-2 text-[8px] text-text-dim pt-1">
-                       <MapPin size={8} />
-                       <span className="truncate">{locationText}</span>
+                     {/* Manual Location Toggle */}
+                     <div className="flex items-center justify-between py-2 border-t border-white/5">
+                        <span className="text-[9px] text-white/60">Use Manual Address</span>
+                        <button 
+                          onClick={() => setUseManualLocation(!useManualLocation)}
+                          className={`w-8 h-4 rounded-full relative transition-colors ${useManualLocation ? 'bg-accent' : 'bg-white/10'}`}
+                        >
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${useManualLocation ? 'translate-x-4' : ''}`} />
+                        </button>
                      </div>
+
+                     {useManualLocation ? (
+                        <textarea 
+                          placeholder="Enter full address manually..."
+                          value={manualLocationText}
+                          onChange={(e) => setManualLocationText(e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent min-h-[60px] resize-none"
+                        />
+                     ) : (
+                        <div className="flex items-center gap-2 text-[8px] text-text-dim pt-1">
+                          <MapPin size={8} />
+                          <span className="line-clamp-2 leading-relaxed">{locationText}</span>
+                        </div>
+                     )}
                    </div>
 
                    {/* AI Pose Dots Toggle */}
