@@ -63,7 +63,7 @@ const toggleFullscreen = () => {
   }
 };
 
-type Mode = 'PHOTO' | 'PORTRAIT' | 'PRO';
+type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO';
 
 interface FilterPreset {
   id: string;
@@ -1074,117 +1074,162 @@ export default function App() {
       </div>
 
       {/* Bottom Interface - Responsive Grid */}
-      <motion.div 
-        animate={{ height: uiVisible ? (window.innerWidth < 768 ? 'auto' : 176) : 0, opacity: uiVisible ? 1 : 0 }}
-        className="overflow-hidden bg-[#111] border-t border-ui-border flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-6 md:px-10 py-4 gap-4 z-30"
-      >
-        {/* Left: Blur Slider Area - Optimized for mobile visibility */}
-        <div className="w-full space-y-3 max-w-[300px] md:max-w-none">
-          <div className="flex items-center justify-between text-[10px] font-bold text-text-dim uppercase tracking-wider">
-            <div className="flex items-center gap-2">
-              <Sun size={12} className="text-accent" />
-              <span>Background Blur</span>
-            </div>
-            <span className="text-white italic">{focus === 0 ? "OFF" : `f/${(22 - focus/5).toFixed(1)}`}</span>
-          </div>
-          <div className="relative group flex items-center h-8">
-            <input 
-              type="range" 
-              min={0} 
-              max={100} 
-              value={focus} 
-              onChange={(e) => setFocus(Number(e.target.value))}
-              className="w-full h-1.5 bg-[#333] appearance-none rounded-full accent-accent cursor-pointer"
-            />
-          </div>
-
-          {/* Subject Size Control */}
-          {focus > 0 && (
-            <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300 pb-2">
-               <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
-                <div className="flex items-center gap-2">
-                  <Maximize size={10} className="text-accent" />
-                  <span>Subject Focus Area</span>
-                </div>
-                <span className="text-white italic">{focusAreaSize}%</span>
-              </div>
-              <input 
-                type="range" 
-                min={10} 
-                max={70} 
-                value={focusAreaSize} 
-                onChange={(e) => setFocusAreaSize(Number(e.target.value))}
-                className="w-full h-1 bg-[#222] appearance-none rounded-full accent-accent cursor-pointer"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Center: Modes + Shutter */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex gap-10 text-[11px] font-bold tracking-[0.15em] uppercase">
-            {(['PHOTO', 'PORTRAIT', 'PRO'] as Mode[]).map(m => (
-              <button 
-                key={m}
-                onClick={() => setMode(m)}
-                className={`relative transition-all pt-2 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white pb-2'}`}
+      <div className="bg-[#111] border-t border-ui-border z-30 overflow-hidden transition-all duration-500 relative">
+        <div className="flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-6 md:px-10 py-4 gap-4">
+          
+          {/* Left: Blur Slider Area */}
+          <AnimatePresence>
+            {uiVisible && (
+              <motion.div 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="w-full space-y-3 max-w-[300px] md:max-w-none"
               >
-                {m}
-                {mode === m && (
-                  <motion.div layoutId="modeDot" className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent" />
+                <div className="flex items-center justify-between text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <Sun size={12} className="text-accent" />
+                    <span>Background Blur</span>
+                  </div>
+                  <span className="text-white italic">{focus === 0 ? "OFF" : `f/${(22 - focus/5).toFixed(1)}`}</span>
+                </div>
+                <div className="relative group flex items-center h-8">
+                  <input 
+                    type="range" 
+                    min={0} 
+                    max={100} 
+                    value={focus} 
+                    onChange={(e) => setFocus(Number(e.target.value))}
+                    className="w-full h-1.5 bg-[#333] appearance-none rounded-full accent-accent cursor-pointer"
+                  />
+                </div>
+
+                {focus > 0 && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300 pb-2">
+                    <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <Maximize size={10} className="text-accent" />
+                        <span>Subject Focus Area</span>
+                      </div>
+                      <span className="text-white italic">{focusAreaSize}%</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min={10} 
+                      max={70} 
+                      value={focusAreaSize} 
+                      onChange={(e) => setFocusAreaSize(Number(e.target.value))}
+                      className="w-full h-1 bg-[#222] appearance-none rounded-full accent-accent cursor-pointer"
+                    />
+                  </div>
                 )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Center: Modes + Shutter */}
+          <div className="flex flex-col items-center gap-4 py-2">
+            <AnimatePresence>
+              {uiVisible && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="flex gap-6 md:gap-10 text-[11px] font-bold tracking-[0.15em] uppercase"
+                >
+                  {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO'] as Mode[]).map(m => (
+                    <button 
+                      key={m}
+                      onClick={() => setMode(m)}
+                      className={`relative transition-all pt-2 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white pb-2'}`}
+                    >
+                      {m}
+                      {mode === m && (
+                        <motion.div layoutId="modeDot" className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent" />
+                      )}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="flex items-center gap-6 md:gap-12">
+              <AnimatePresence>
+                {uiVisible && (
+                  <>
+                    <motion.button 
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={() => {
+                        setShowPoseDots(!showPoseDots);
+                        if (!showPoseDots) analyzeScene(); 
+                      }}
+                      className={`p-3 md:p-4 rounded-full border transition-all ${showPoseDots ? 'border-accent bg-accent/20' : 'border-white/10'}`}
+                      title="AI Pose Recommendation"
+                    >
+                      <Info size={20} className={showPoseDots ? 'text-accent' : 'text-white'} />
+                    </motion.button>
+
+                    <motion.button 
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={() => setAutoAssist(!autoAssist)}
+                      className={`p-3 md:p-4 rounded-full border transition-all ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
+                    >
+                      <Target size={20} className={autoAssist ? 'text-accent' : 'text-white'} />
+                    </motion.button>
+                  </>
+                )}
+              </AnimatePresence>
+
+              <button 
+                onClick={capturePhoto}
+                className={`w-20 h-20 md:w-24 md:h-24 rounded-full border-[4px] md:border-[6px] border-white p-1.5 hover:scale-105 active:scale-95 transition-all group ${!uiVisible ? 'ring-4 ring-accent/30' : ''}`}
+              >
+                <div className="w-full h-full rounded-full bg-white group-hover:bg-white/90 transition-colors" />
               </button>
-            ))}
+
+              <AnimatePresence>
+                {uiVisible && (
+                  <motion.button 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    onClick={toggleCamera}
+                    className="p-3 md:p-4 rounded-full border border-white/10 hover:border-white transition-colors"
+                  >
+                    <RotateCcw size={20} className={facingMode === 'user' ? 'rotate-180' : ''} />
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
-          <div className="flex items-center gap-6 md:gap-12">
-            <button 
-              onClick={() => {
-                setShowPoseDots(!showPoseDots);
-                if (!showPoseDots) analyzeScene(); // Trigger analysis when enabling
-              }}
-              className={`p-3 md:p-4 rounded-full border transition-all ${showPoseDots ? 'border-accent bg-accent/20' : 'border-white/10'}`}
-              title="AI Pose Recommendation"
-            >
-              <Info size={20} className={showPoseDots ? 'text-accent' : 'text-white'} />
-            </button>
-
-            <button 
-              onClick={() => setAutoAssist(!autoAssist)}
-              className={`p-3 md:p-4 rounded-full border transition-all ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
-            >
-              <Target size={20} className={autoAssist ? 'text-accent' : 'text-white'} />
-            </button>
-
-            <button 
-              onClick={capturePhoto}
-              className="w-20 h-20 md:w-24 md:h-24 rounded-full border-[4px] md:border-[6px] border-white p-1.5 hover:scale-105 active:scale-95 transition-all group"
-            >
-              <div className="w-full h-full rounded-full bg-white group-hover:bg-white/90 transition-colors" />
-            </button>
-
-            <button 
-              onClick={toggleCamera}
-              className="p-3 md:p-4 rounded-full border border-white/10 hover:border-white transition-colors"
-            >
-              <RotateCcw size={20} className={facingMode === 'user' ? 'rotate-180' : ''} />
-            </button>
-          </div>
+          {/* Right: Info Area */}
+          <AnimatePresence>
+            {uiVisible && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="flex md:flex-col items-center justify-end w-full gap-4 md:gap-1 text-right"
+              >
+                <button 
+                  onClick={() => setPoseIndex((poseIndex + 1) % poses.length)}
+                  className="text-right group"
+                >
+                  <span className="text-[10px] text-text-dim font-bold uppercase tracking-widest block group-hover:text-accent transition-colors">Switch Pose Guide</span>
+                  <p className="text-[12px] text-white leading-tight font-mono group-hover:underline">
+                    {poses[poseIndex].name} Assist
+                  </p>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-
-        {/* Right: Info Area - Stacked on mobile */}
-        <div className="flex md:flex-col items-center justify-end w-full gap-4 md:gap-1 text-right">
-          <button 
-            onClick={() => setPoseIndex((poseIndex + 1) % poses.length)}
-            className="text-right group"
-          >
-            <span className="text-[10px] text-text-dim font-bold uppercase tracking-widest block group-hover:text-accent transition-colors">Switch Pose Guide</span>
-            <p className="text-[12px] text-white leading-tight font-mono group-hover:underline">
-              {poses[poseIndex].name} Assist
-            </p>
-          </button>
-        </div>
-      </motion.div>
+      </div>
 
       {/* Gallery Modal / Captured Preview */}
       <AnimatePresence>
