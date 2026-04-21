@@ -501,16 +501,18 @@ export default function App() {
   // Handle Auto-Assist & Continuous Tracking
   useEffect(() => {
     let interval: any;
-    // Frequency increases if Human Detection is on for "continuous" tracking feel
-    const frequency = aiHumanDetection ? 4000 : 10000;
+    // Frequency increases if Human Detection or Timer is on for faster response
+    let frequency = 10000;
+    if (aiHumanDetection) frequency = 4000;
+    if (timerDelay > 0 && countdown === null) frequency = 2000; // Fast detection for palm gesture
     
-    if ((autoAssist || aiHumanDetection) && !aiAnalyzing) {
+    if ((autoAssist || aiHumanDetection || (timerDelay > 0 && countdown === null)) && !aiAnalyzing) {
       interval = setInterval(() => {
         analyzeScene();
       }, frequency);
     }
     return () => clearInterval(interval);
-  }, [autoAssist, aiHumanDetection, aiAnalyzing]);
+  }, [autoAssist, aiHumanDetection, aiAnalyzing, timerDelay, countdown]);
 
   const toggleCamera = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
@@ -707,7 +709,7 @@ export default function App() {
                        1. Identify main objects.
                        2. Recommend the best filter ID from available: standard, vibrant, iphone_vibrant, iphone_warm, iphone_cool, cinematic, noir.
                        3. If humans are present, provide ONE main bounding box [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates for the primary person.
-                       4. Palm Detection: If a human hand with palm facing the camera is visible, set "palm_detected" to true.
+                       4. Palm / Hand Trigger: Look specifically for a human hand with the palm open and facing towards the camera (the "Show Palm" gesture). If detected, set "palm_detected" to true.
                        5. Based on light and subject, suggest 2 professional photography tips.
                        
                        Return JSON strictly: { 
@@ -819,6 +821,14 @@ export default function App() {
       </div>
     );
   }
+
+  const handleShutterClick = () => {
+    if (timerDelay > 0 && countdown === null) {
+      setCountdown(timerDelay);
+    } else {
+      capturePhoto();
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-bg flex flex-col font-sans text-text-dim selection:bg-accent/30">
@@ -1580,7 +1590,7 @@ export default function App() {
               </AnimatePresence>
 
               <button 
-                onClick={capturePhoto}
+                onClick={handleShutterClick}
                 className={`w-20 h-20 md:w-24 md:h-24 rounded-full border-[4px] md:border-[6px] border-white p-1.5 hover:scale-105 active:scale-95 transition-all group ${!uiVisible ? 'ring-4 ring-accent/30' : ''}`}
               >
                 <div className="w-full h-full rounded-full bg-white group-hover:bg-white/90 transition-colors" />
