@@ -101,6 +101,16 @@ const FILTER_PRESETS: FilterPreset[] = [
   { id: 'dramatic', name: 'Dramatic Shadow', css: 'contrast(1.6) brightness(0.85) saturate(1.2)', icon: 'MOOD' },
   { id: 'vintage_70s', name: 'Vintage 70s', css: 'sepia(0.4) contrast(0.9) brightness(1.05) saturate(1.3)', icon: 'CLASSIC' },
   { id: 'cyber', name: 'Cyberpunk', css: 'hue-rotate(-40deg) saturate(1.6) contrast(1.3) brightness(1.1)', icon: 'NEON' },
+  { id: 'ip_vivid', name: 'iPhone Vivid', css: 'saturate(1.6) contrast(1.15) brightness(1.05)', icon: 'IPHONE' },
+  { id: 'ip_vivid_warm', name: 'iPhone Vivid Warm', css: 'saturate(1.6) contrast(1.15) brightness(1.05) sepia(0.1)', icon: 'IPHONE' },
+  { id: 'ip_vivid_cool', name: 'iPhone Vivid Cool', css: 'saturate(1.6) contrast(1.15) brightness(1.05) hue-rotate(-5deg)', icon: 'IPHONE' },
+  { id: 'ip_dramatic', name: 'iPhone Dramatic', css: 'contrast(1.4) saturate(0.8) brightness(0.95)', icon: 'IPHONE' },
+  { id: 'ip_dramatic_warm', name: 'iPhone Dramatic Warm', css: 'contrast(1.4) saturate(0.8) brightness(0.95) sepia(0.15)', icon: 'IPHONE' },
+  { id: 'ip_dramatic_cool', name: 'iPhone Dramatic Cool', css: 'contrast(1.4) saturate(0.8) brightness(0.95) hue-rotate(-8deg)', icon: 'IPHONE' },
+  { id: 'ip_mono', name: 'iPhone Mono', css: 'grayscale(1) contrast(1.1) brightness(1.05)', icon: 'IPHONE' },
+  { id: 'ip_silvertone', name: 'iPhone Silvertone', css: 'grayscale(1) contrast(1.3) brightness(1.1)', icon: 'IPHONE' },
+  { id: 'ip_high_key_mono', name: 'iPhone High Key Mono', css: 'grayscale(1) brightness(1.4) contrast(0.9)', icon: 'IPHONE' },
+  { id: 'ip_pro_portrait', name: 'iPhone Pro Studio', css: 'saturate(1.1) contrast(1.1) brightness(1.08) sepia(0.02)', icon: 'IPHONE PRO' },
 ];
 
 // Dot-based pose silhouettes (coordinates from 0-100)
@@ -352,6 +362,14 @@ export default function App() {
   const [focusMode, setFocusMode] = useState<FocusMode>('FOCUS_SUBJECT');
   const [aiHumanDetection, setAiHumanDetection] = useState(false);
   const [subjectBox, setSubjectBox] = useState<{ymin:number, xmin:number, ymax:number, xmax:number} | null>(null);
+
+  // AI Human Detection Auto-activation for iPhone Filters
+  useEffect(() => {
+    if (activeFilter.id.startsWith('ip_')) {
+      setAiHumanDetection(true);
+      if (focus === 0) setFocus(50); // Set default blur thickness for iPhone mode
+    }
+  }, [activeFilter.id]);
 
   const handleViewfinderTap = (e: React.MouseEvent | React.TouchEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -810,7 +828,7 @@ export default function App() {
             parts: [
               { text: `Analyze this camera view. 
                        1. Identify main objects.
-                       2. Recommend the best filter ID from available: standard, vibrant, iphone_vibrant, iphone_warm, iphone_cool, cinematic, noir.
+                       2. Recommend the best filter ID from available: standard, vibrant, ip_vivid, ip_vivid_warm, ip_dramatic, ip_pro_portrait, cinematic, noir.
                        3. If humans are present, provide ONE main bounding box [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates for the primary person.
                        4. Palm / Hand Trigger: Look specifically for a human hand with the palm open and facing towards the camera (the "Show Palm" gesture). If detected, set "palm_detected" to true.
                        5. Based on light and subject, suggest 2 professional photography tips.
@@ -1178,6 +1196,30 @@ export default function App() {
           className="relative w-full h-full rounded-sm overflow-hidden border-[1px] md:border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900 cursor-crosshair"
         >
           {/* Smart AI Detection Ring (Invisible if not detected) */}
+          {(aiHumanDetection || activeFilter.id.startsWith('ip_')) && (
+            <div className="absolute top-4 right-4 z-[45] flex flex-col items-end gap-1 pointer-events-none">
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="px-3 py-1 bg-accent/90 backdrop-blur-xl rounded-full border border-white/20 flex items-center gap-2 shadow-xl"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
+                  {activeFilter.id.startsWith('ip_') ? 'iPhone Pro Portrait' : 'AI Subject Tracking'}
+                </span>
+              </motion.div>
+              {activeFilter.id.startsWith('ip_') && focus > 0 && (
+                <motion.span 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 0.6 }}
+                  className="text-[7px] text-white uppercase font-mono tracking-widest mr-2"
+                >
+                  Depth: f/{(22 - focus/5).toFixed(1)}
+                </motion.span>
+              )}
+            </div>
+          )}
+
           {aiHumanDetection && subjectBox && (
             <motion.div 
               initial={{ opacity: 0 }}
