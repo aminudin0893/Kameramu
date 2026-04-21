@@ -32,7 +32,9 @@ import {
   Home,
   Monitor,
   Eye,
-  EyeOff
+  EyeOff,
+  Hand,
+  Timer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -255,6 +257,8 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('PHOTO');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [pasPhotoSize, setPasPhotoSize] = useState<PasPhotoSize>('3x4');
+  const [timerDelay, setTimerDelay] = useState(0); // 0, 3, 5, 10
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [showGrid, setShowGrid] = useState(false);
   const [autoAssist, setAutoAssist] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -665,6 +669,20 @@ export default function App() {
     
     setTimeout(() => setIsCapturing(false), 300);
   }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualTime, manualTimeValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode, focusMode, aiHumanDetection, subjectBox]);
+
+  // Handle Timer Countdown
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown === 0) {
+      capturePhoto();
+      setCountdown(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [countdown, capturePhoto]);
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
     setAiAnalyzing(true);
@@ -689,13 +707,15 @@ export default function App() {
                        1. Identify main objects.
                        2. Recommend the best filter ID from available: standard, vibrant, iphone_vibrant, iphone_warm, iphone_cool, cinematic, noir.
                        3. If humans are present, provide ONE main bounding box [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates for the primary person.
-                       4. Based on light and subject, suggest 2 professional photography tips.
+                       4. Palm Detection: If a human hand with palm facing the camera is visible, set "palm_detected" to true.
+                       5. Based on light and subject, suggest 2 professional photography tips.
                        
                        Return JSON strictly: { 
                          "objects": [], 
                          "tips": [], 
                          "recommended_filter_id": "string",
-                         "subject_box": [ymin, xmin, ymax, xmax] | null
+                         "subject_box": [ymin, xmin, ymax, xmax] | null,
+                         "palm_detected": boolean
                        }` },
               { inlineData: { mimeType: "image/jpeg", data: base64Image } }
             ]
@@ -706,6 +726,11 @@ export default function App() {
 
       const data = JSON.parse(response.text || '{}');
       setAiFeedback(data);
+      
+      // Palm Trigger for Countdown
+      if (data.palm_detected && timerDelay > 0 && countdown === null) {
+        setCountdown(timerDelay);
+      }
       
       if (data.recommended_filter_id) {
         const found = FILTER_PRESETS.find(f => f.id === data.recommended_filter_id);
@@ -823,6 +848,14 @@ export default function App() {
              <span className="text-white">85%</span>
           </div>
           <div className="flex items-center gap-2 md:gap-4 shrink-0">
+            <button 
+              onClick={() => setTimerDelay(timerDelay === 0 ? 3 : timerDelay === 3 ? 5 : timerDelay === 5 ? 10 : 0)}
+              className={`p-1.5 transition-colors flex items-center gap-1.5 ${timerDelay > 0 ? 'text-accent' : 'hover:text-white opacity-50 hover:opacity-100'}`}
+              title="Timer for Hand Trigger"
+            >
+              <Timer size={16} />
+              {timerDelay > 0 && <span className="text-[10px] font-bold">{timerDelay}s</span>}
+            </button>
             <button 
               onClick={() => window.location.reload()}
               className="p-1.5 hover:text-white transition-colors" 
@@ -1272,6 +1305,37 @@ export default function App() {
                <img src={capturedImage} className="w-full h-full object-cover" />
             </div>
           )}
+
+          {/* Countdown Indicator */}
+          {countdown !== null && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none bg-black/20">
+              <motion.span 
+                key={countdown}
+                initial={{ scale: 2, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                className="text-8xl md:text-[12rem] font-black text-white drop-shadow-[0_0_30px_rgba(0,0,0,0.5)]"
+              >
+                {countdown}
+              </motion.span>
+            </div>
+          )}
+
+          {/* Palm Trigger Indicator */}
+          {aiFeedback?.palm_detected && timerDelay > 0 && countdown !== null && (
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="absolute top-6 right-6 z-40 bg-accent text-white px-4 py-2 rounded-full flex items-center gap-3 shadow-2xl border border-white/20"
+            >
+              <Hand size={16} className="animate-bounce" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest leading-none">Palm Detected</span>
+                <span className="text-[8px] font-bold opacity-80 uppercase tracking-tighter">Starting Countdown...</span>
+              </div>
+            </motion.div>
+          )}
+
           <AnimatePresence>
             {aiFeedback && (
               <motion.div 
