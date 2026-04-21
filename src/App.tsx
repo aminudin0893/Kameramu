@@ -69,7 +69,7 @@ const toggleFullscreen = () => {
   }
 };
 
-type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO' | 'PAS_PHOTO' | 'FREE_POSE';
+type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO' | 'PAS_PHOTO' | 'FREE_POSE' | 'SCAN';
 type FocusMode = 'FOCUS_SUBJECT' | 'BLUR_SUBJECT';
 type PasPhotoSize = '2x3' | '3x4' | '4x6';
 
@@ -259,6 +259,48 @@ function DotSilhouette({ poseIndex }: { poseIndex: number }) {
       <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 bg-accent/30 backdrop-blur-xl px-4 py-1.5 rounded-full border border-accent/50 flex flex-col items-center">
         <span className="text-[10px] text-white font-black uppercase tracking-[0.2em]">{pose.name}</span>
         <span className="text-[7px] text-accent-foreground/70 uppercase font-bold tracking-tighter">Follow the Dots</span>
+      </div>
+    </motion.div>
+  );
+}
+
+function DocScanGuide({ tilt }: { tilt: { roll: number, pitch: number } }) {
+  const isLevel = Math.abs(tilt.roll) < 2 && Math.abs(tilt.pitch) < 2;
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center p-12"
+    >
+      <div 
+        className={`border-2 relative transition-all duration-500 w-full max-w-xs md:max-w-sm aspect-[1/1.414] ${isLevel ? 'border-green-500 bg-green-500/10 shadow-[0_0_50px_rgba(34,197,94,0.3)]' : 'border-white/40 bg-white/5 shadow-2xl'}`}
+      >
+        {/* Corner Brackets */}
+        <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-accent" />
+        <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-accent" />
+        <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-accent" />
+        <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-accent" />
+        
+        {/* Level Indicator */}
+        <div className="absolute inset-0 flex items-center justify-center">
+           <div className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-colors ${isLevel ? 'border-green-500 bg-green-500/20 shadow-lg' : 'border-white/20 text-white/20'}`}>
+              <Maximize size={24} className={isLevel ? 'text-green-500 animate-pulse' : ''} />
+           </div>
+        </div>
+
+        {/* Scan Status Label */}
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+          <div className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-2xl backdrop-blur-xl transition-all ${isLevel ? 'bg-green-500 text-white scale-110' : 'bg-black/60 text-white border border-white/10'}`}>
+            {isLevel ? 'System Ready' : 'Align for Scan'}
+          </div>
+          <span className="text-[8px] text-white/60 font-bold uppercase tracking-widest text-center max-w-[150px]">LMXP Document Engine Active • Anti-Blur Enabled</span>
+        </div>
+        
+        {/* Decorative Grid Lines */}
+        <div className="absolute inset-0 grid grid-cols-4 grid-rows-6 opacity-10">
+          {[...Array(24)].map((_, i) => <div key={i} className="border-[0.5px] border-white" />)}
+        </div>
       </div>
     </motion.div>
   );
@@ -553,7 +595,13 @@ export default function App() {
 
       // Selective Blur Logic
       const blurVal = focus > 0 ? focus / 4 : 0; 
-      const baseFilters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10}) ${activeFilter.css}`;
+      let baseFilters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10}) ${activeFilter.css}`;
+      
+      // Professional Scan Processing (Whiten background, darken text, remove mid-tone stains)
+      if (mode === 'SCAN') {
+        baseFilters = 'contrast(1.8) brightness(1.15) grayscale(1) saturate(0) sepia(0.05)';
+      }
+      
       const sharpFilters = baseFilters;
       const blurredFilters = `${sharpFilters} blur(${blurVal}px)`;
       
@@ -1364,6 +1412,9 @@ export default function App() {
             {mode === 'PAS_PHOTO' && (
               <PasPhotoGuide size={pasPhotoSize} subjectBox={subjectBox} />
             )}
+            {mode === 'SCAN' && (
+              <DocScanGuide tilt={tilt} />
+            )}
             {(showPoseDots || mode === 'FREE_POSE') && (
               <DotSilhouette poseIndex={mode === 'FREE_POSE' ? poseIndex : (recommendedPoseIdx ?? 0)} />
             )}
@@ -1592,7 +1643,7 @@ export default function App() {
                     exit={{ opacity: 0, y: 10 }}
                     className="flex gap-4 md:gap-8 text-[9px] md:text-[11px] font-bold tracking-[0.1em] uppercase overflow-x-auto no-scrollbar justify-start md:justify-center px-8"
                   >
-                    {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE'] as Mode[]).map(m => (
+                    {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE', 'SCAN'] as Mode[]).map(m => (
                       <button 
                         key={m}
                         onClick={() => {
