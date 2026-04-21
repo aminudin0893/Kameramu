@@ -34,7 +34,8 @@ import {
   Eye,
   EyeOff,
   Hand,
-  Timer
+  Timer,
+  Wand2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -261,6 +262,7 @@ export default function App() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showGrid, setShowGrid] = useState(false);
   const [autoAssist, setAutoAssist] = useState(false);
+  const [hdEnhance, setHdEnhance] = useState<'OFF' | 'SMOOTH' | 'HD'>('OFF');
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [poseIndex, setPoseIndex] = useState(0);
@@ -678,6 +680,38 @@ export default function App() {
     
     setTimeout(() => setIsCapturing(false), 300);
   }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualTime, manualTimeValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode, focusMode, aiHumanDetection, subjectBox]);
+
+  const handleDownload = async () => {
+    if (!capturedImage) return;
+    if (hdEnhance === 'OFF') {
+      const link = document.createElement('a');
+      link.href = capturedImage;
+      link.download = "LUMIX_PRO_MASTER.jpg";
+      link.click();
+      return;
+    }
+
+    const img = new Image();
+    img.src = capturedImage;
+    await new Promise(resolve => img.onload = resolve);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      if (hdEnhance === 'HD') {
+        ctx.filter = 'contrast(1.15) saturate(1.1) brightness(1.05)';
+      } else if (hdEnhance === 'SMOOTH') {
+        ctx.filter = 'saturate(1.08) brightness(1.08) contrast(0.92)';
+      }
+      ctx.drawImage(img, 0, 0);
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/jpeg', 0.98);
+      link.download = `LUMIX_PRO_${hdEnhance}_ENHANCED.jpg`;
+      link.click();
+    }
+  };
 
   // Handle Timer Countdown
   useEffect(() => {
@@ -1474,8 +1508,8 @@ export default function App() {
       </div>
 
       {/* Bottom Interface - Responsive Grid */}
-      <div className="bg-[#111] border-t border-ui-border z-30 overflow-hidden transition-all duration-500 relative">
-        <div className="flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-6 md:px-10 py-4 gap-4">
+      <div className="bg-[#111]/90 backdrop-blur-xl border-t border-ui-border z-30 overflow-hidden transition-all duration-500 relative">
+        <div className="flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-4 md:px-10 py-2 gap-3">
           
           {/* Left: Blur Slider Area */}
           <AnimatePresence>
@@ -1484,16 +1518,16 @@ export default function App() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="w-full space-y-3 max-w-[300px] md:max-w-none"
+                className="w-full space-y-1.5 max-w-[300px] md:max-w-none"
               >
-                <div className="flex items-center justify-between text-[10px] font-bold text-text-dim uppercase tracking-wider">
-                  <div className="flex items-center gap-2">
-                    <Sun size={12} className="text-accent" />
+                <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5">
+                    <Sun size={11} className="text-accent" />
                     <span>Background Blur</span>
                   </div>
                   <span className="text-white italic">{focus === 0 ? "OFF" : `f/${(22 - focus/5).toFixed(1)}`}</span>
                 </div>
-                <div className="relative group flex items-center h-8">
+                <div className="relative group flex items-center h-6">
                   <input 
                     type="range" 
                     min={0} 
@@ -1528,7 +1562,7 @@ export default function App() {
           </AnimatePresence>
 
           {/* Center: Modes + Shutter */}
-          <div className="flex flex-col items-center gap-4 py-2">
+          <div className="flex flex-col items-center gap-2 pb-1">
             <AnimatePresence>
               {uiVisible && (
                 <div className="relative w-full max-w-[90vw] overflow-hidden">
@@ -1549,11 +1583,11 @@ export default function App() {
                           setMode(m);
                           if (m === 'FREE_POSE') setShowPoseDots(true);
                         }}
-                        className={`relative transition-all pt-2 pb-3 shrink-0 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white'}`}
+                        className={`relative transition-all pt-1 pb-2 shrink-0 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white'}`}
                       >
                         <span className="whitespace-nowrap">{m.replace('_', ' ')}</span>
                         {mode === m && (
-                          <motion.div layoutId="modeDot" className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent" />
+                          <motion.div layoutId="modeDot" className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent" />
                         )}
                       </button>
                     ))}
@@ -1565,7 +1599,7 @@ export default function App() {
             {/* Sub-selectors for Pas Photo and Free Pose */}
             <AnimatePresence>
               {uiVisible && (
-                <div className="h-6">
+                <div className="h-4 flex items-center justify-center">
                   {mode === 'PAS_PHOTO' && (
                     <motion.div 
                       initial={{ opacity: 0, y: 5 }}
@@ -1577,7 +1611,7 @@ export default function App() {
                         <button 
                           key={s}
                           onClick={() => setPasPhotoSize(s)}
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-md transition-colors ${pasPhotoSize === s ? 'bg-accent text-white' : 'text-text-dim hover:text-white'}`}
+                          className={`text-[8px] font-bold px-2 py-0.5 rounded-md transition-colors ${pasPhotoSize === s ? 'bg-accent text-white' : 'text-text-dim hover:text-white'}`}
                         >
                           {s}
                         </button>
@@ -1589,25 +1623,25 @@ export default function App() {
                       initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 5 }}
-                      className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[300px] px-4"
+                      className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[300px]"
                     >
                       <button 
                         onClick={() => setPoseIndex((prev) => (prev - 1 + DOT_POSES.length) % DOT_POSES.length)}
                         className="p-1 text-white/20 hover:text-white transition-colors"
                       >
-                        <ChevronLeft size={16} />
+                        <ChevronLeft size={14} />
                       </button>
-                      <div className="flex flex-col items-center min-w-[80px]">
-                        <span className="text-[8px] text-accent font-bold uppercase tracking-widest leading-none mb-1">Template</span>
-                        <span className="text-[10px] text-white font-mono whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
-                          {poseIndex + 1}/{DOT_POSES.length}: {DOT_POSES[poseIndex].name}
+                      <div className="flex flex-col items-center min-w-[60px]">
+                        <span className="text-[7px] text-accent font-bold uppercase tracking-widest leading-none mb-0.5">Template</span>
+                        <span className="text-[9px] text-white font-mono whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
+                          {poseIndex + 1}/{DOT_POSES.length}
                         </span>
                       </div>
                       <button 
                         onClick={() => setPoseIndex((prev) => (prev + 1) % DOT_POSES.length)}
                         className="p-1 text-white/20 hover:text-white transition-colors"
                       >
-                        <ChevronRight size={16} />
+                        <ChevronRight size={14} />
                       </button>
                     </motion.div>
                   )}
@@ -1615,7 +1649,7 @@ export default function App() {
               )}
             </AnimatePresence>
 
-            <div className="flex items-center gap-6 md:gap-12">
+            <div className="flex items-center gap-4 md:gap-8 mt-1">
               <AnimatePresence>
                 {uiVisible && (
                   <>
@@ -1627,10 +1661,10 @@ export default function App() {
                         setShowPoseDots(!showPoseDots);
                         if (!showPoseDots) analyzeScene(); 
                       }}
-                      className={`p-3 md:p-4 rounded-full border transition-all ${showPoseDots ? 'border-accent bg-accent/20' : 'border-white/10'}`}
+                      className={`p-2 md:p-3 rounded-full border transition-all ${showPoseDots ? 'border-accent bg-accent/20' : 'border-white/10'}`}
                       title="AI Pose Recommendation"
                     >
-                      <Info size={20} className={showPoseDots ? 'text-accent' : 'text-white'} />
+                      <Info size={18} className={showPoseDots ? 'text-accent' : 'text-white'} />
                     </motion.button>
 
                     <motion.button 
@@ -1638,9 +1672,9 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                       onClick={() => setAutoAssist(!autoAssist)}
-                      className={`p-3 md:p-4 rounded-full border transition-all ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
+                      className={`p-2 md:p-3 rounded-full border transition-all ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
                     >
-                      <Target size={20} className={autoAssist ? 'text-accent' : 'text-white'} />
+                      <Target size={18} className={autoAssist ? 'text-accent' : 'text-white'} />
                     </motion.button>
                   </>
                 )}
@@ -1648,7 +1682,7 @@ export default function App() {
 
               <button 
                 onClick={handleShutterClick}
-                className={`w-20 h-20 md:w-24 md:h-24 rounded-full border-[4px] md:border-[6px] border-white p-1.5 hover:scale-105 active:scale-95 transition-all group ${!uiVisible ? 'ring-4 ring-accent/30' : ''}`}
+                className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-[3px] md:border-[4px] border-white p-1 hover:scale-105 active:scale-95 transition-all group ${!uiVisible ? 'ring-4 ring-accent/30' : ''}`}
               >
                 <div className="w-full h-full rounded-full bg-white group-hover:bg-white/90 transition-colors" />
               </button>
@@ -1660,9 +1694,9 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
                     onClick={toggleCamera}
-                    className="p-3 md:p-4 rounded-full border border-white/10 hover:border-white transition-colors"
+                    className="p-2 md:p-3 rounded-full border border-white/10 hover:border-white transition-colors"
                   >
-                    <RotateCcw size={20} className={facingMode === 'user' ? 'rotate-180' : ''} />
+                    <RotateCcw size={18} className={facingMode === 'user' ? 'rotate-180' : ''} />
                   </motion.button>
                 )}
               </AnimatePresence>
@@ -1676,7 +1710,7 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
-                className="flex md:flex-col items-center justify-end w-full gap-4 md:gap-1 text-right"
+                className="flex md:flex-col items-center justify-end w-full gap-2 md:gap-0.5 text-right mt-1 md:mt-0"
               >
                 <button 
                   onClick={() => setPoseIndex((poseIndex + 1) % poses.length)}
@@ -1722,7 +1756,17 @@ export default function App() {
                
                {/* High-End Image Preview Section */}
                <div className="flex-1 relative rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(255,77,0,0.15)] border border-white/10 group bg-[#080808] flex items-center justify-center">
-                 <img src={capturedImage} className="max-w-full max-h-full object-contain" alt="Captured" referrerPolicy="no-referrer" />
+                 <img src={capturedImage} 
+                    className="max-w-full max-h-full object-contain transition-all duration-500" 
+                    style={{ 
+                      filter: hdEnhance === 'HD' 
+                        ? 'contrast(1.2) saturate(1.1) brightness(1.05)' 
+                        : hdEnhance === 'SMOOTH' 
+                        ? 'saturate(1.08) brightness(1.1) contrast(0.9) blur(0.5px)' 
+                        : 'none' 
+                    }}
+                    alt="Captured" 
+                    referrerPolicy="no-referrer" />
                  
                  {/* Floating Labels */}
                  <div className="absolute top-6 left-6 hidden md:flex flex-col gap-2">
@@ -1743,23 +1787,31 @@ export default function App() {
                </div>
                
                {/* Enhanced Action Controls */}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
+               <div className="flex flex-col md:flex-row gap-3 pb-4">
                  <button 
-                  onClick={() => setCapturedImage(null)}
-                  className="py-5 rounded-2xl bg-white/5 border border-white/10 text-white font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-4 backdrop-blur-xl group active:scale-[0.98]"
+                  onClick={() => { setCapturedImage(null); setHdEnhance('OFF'); }}
+                  className="flex-1 py-4 md:py-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold uppercase tracking-[0.2em] hover:bg-white/10 transition-all flex items-center justify-center gap-3 backdrop-blur-xl group active:scale-[0.98]"
                  >
-                   <RotateCcw size={20} className="group-hover:-rotate-45 transition-transform" />
-                   <span className="text-sm">Retake Image</span>
+                   <RotateCcw size={18} className="group-hover:-rotate-45 transition-transform" />
+                   <span className="text-[10px] md:text-xs">Retake</span>
                  </button>
-                 <a 
-                  href={capturedImage} 
-                  download="LUMIX_PRO_MASTER.jpg"
-                  className="py-5 rounded-2xl bg-accent text-white font-bold uppercase tracking-widest hover:bg-accent/80 transition-all shadow-2xl shadow-accent/20 flex items-center justify-center gap-4 active:scale-[0.98] relative group overflow-hidden"
+
+                 <button 
+                  onClick={() => setHdEnhance(prev => prev === 'OFF' ? 'HD' : prev === 'HD' ? 'SMOOTH' : 'OFF')}
+                  className={`flex-1 py-4 md:py-6 rounded-2xl border transition-all flex items-center justify-center gap-3 backdrop-blur-xl group active:scale-[0.98] ${hdEnhance !== 'OFF' ? 'bg-accent/20 border-accent text-accent' : 'bg-white/5 border-white/10 text-white hover:border-accent/50'}`}
+                 >
+                   <Wand2 size={18} className={hdEnhance !== 'OFF' ? 'animate-pulse' : ''} />
+                   <span className="text-[10px] md:text-xs">{hdEnhance === 'OFF' ? 'HD Filter' : hdEnhance === 'HD' ? 'Ultra HD' : 'Smooth Clear'}</span>
+                 </button>
+
+                 <button 
+                  onClick={handleDownload}
+                  className="flex-[1.5] py-4 md:py-6 rounded-2xl bg-accent text-white font-bold uppercase tracking-[0.2em] hover:bg-accent/80 transition-all shadow-2xl shadow-accent/20 flex items-center justify-center gap-3 active:scale-[0.98] relative group overflow-hidden"
                  >
                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                   <Download size={20} className="group-hover:translate-y-0.5 transition-transform" />
-                   <span className="text-sm">Save to Gallery</span>
-                 </a>
+                   <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
+                   <span className="text-[10px] md:text-xs font-black">Save Photo</span>
+                 </button>
                </div>
             </div>
           </motion.div>
