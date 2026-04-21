@@ -35,7 +35,8 @@ import {
   EyeOff,
   Hand,
   Timer,
-  Wand2
+  Wand2,
+  SquareUser
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -80,13 +81,26 @@ interface FilterPreset {
 }
 
 const FILTER_PRESETS: FilterPreset[] = [
-  { id: 'standard', name: 'Standard', css: '', icon: 'Standard' },
-  { id: 'vibrant', name: 'Vibrant', css: 'saturate(1.4) contrast(1.1) brightness(1.05)', icon: 'Vibrant' },
-  { id: 'iphone_vibrant', name: 'iPhone Vibrant', css: 'saturate(1.5) contrast(1.1) brightness(1.02) sepia(0.05)', icon: 'Smart' },
-  { id: 'iphone_warm', name: 'iPhone Warm', css: 'sepia(0.15) saturate(1.2) contrast(1.05) brightness(1.02)', icon: 'Warm' },
-  { id: 'iphone_cool', name: 'iPhone Cool', css: 'hue-rotate(-5deg) saturate(1.1) contrast(1.05)', icon: 'Cool' },
-  { id: 'cinematic', name: 'Cinematic', css: 'contrast(1.2) saturate(0.85) sepia(0.2) hue-rotate(5deg)', icon: 'Cinema' },
-  { id: 'noir', name: 'Noir', css: 'grayscale(1) contrast(1.7) brightness(0.85)', icon: 'Deep B&W' },
+  { id: 'standard', name: 'Standard', css: '', icon: 'NATURAL' },
+  { id: 'vibrant', name: 'Vibrant+', css: 'saturate(1.4) contrast(1.1) brightness(1.05)', icon: 'VIVID' },
+  { id: 'portrait', name: 'Pro Portrait', css: 'saturate(1.1) brightness(1.02) contrast(0.98) sepia(0.05)', icon: 'SKIN' },
+  { id: 'fuji', name: 'Fuji Astia', css: 'sepia(0.08) saturate(1.15) contrast(1.05) brightness(1.02)', icon: 'SOFT' },
+  { id: 'kodak', name: 'Kodak Portra', css: 'sepia(0.12) saturate(0.98) contrast(1.1) brightness(1.03)', icon: 'WARM' },
+  { id: 'leica', name: 'Leica B&W', css: 'grayscale(1) contrast(1.8) brightness(0.9)', icon: 'B&W' },
+  { id: 'velvia', name: 'Velvia Nature', css: 'saturate(1.8) contrast(1.2) brightness(1.05)', icon: 'LANDSCAPE' },
+  { id: 'urban', name: 'Urban Teal', css: 'hue-rotate(-15deg) saturate(1.25) contrast(1.1) brightness(1.02)', icon: 'CITY' },
+  { id: 'golden', name: 'Golden Hour', css: 'sepia(0.25) saturate(1.4) brightness(1.08)', icon: 'SUNSET' },
+  { id: 'cinematic', name: 'Cinematic', css: 'contrast(1.25) saturate(0.85) sepia(0.12) hue-rotate(8deg)', icon: 'MOVIE' },
+  { id: 'pastel', name: 'Pure Pastel', css: 'brightness(1.15) contrast(0.85) saturate(0.75) sepia(0.05)', icon: 'LIGHT' },
+  { id: 'noir', name: 'Noir Deep', css: 'grayscale(1) contrast(2.2) brightness(0.75)', icon: 'DARK' },
+  { id: 'modern', name: 'Modern Clean', css: 'brightness(1.06) contrast(1.08) saturate(0.88)', icon: 'MINIMAL' },
+  { id: 'analog', name: 'Retro Analog', css: 'sepia(0.3) contrast(0.9) brightness(1.12) saturate(1.1)', icon: 'FILM' },
+  { id: 'ocean', name: 'Oceanic Blue', css: 'hue-rotate(10deg) saturate(1.1) brightness(1.02) contrast(1.08)', icon: 'SEA' },
+  { id: 'matte', name: 'Matte Finish', css: 'contrast(0.75) brightness(1.12) saturate(0.92)', icon: 'PREMIUM' },
+  { id: 'high_key', name: 'High Key Studio', css: 'brightness(1.3) contrast(0.8) saturate(0.8)', icon: 'STUDIO' },
+  { id: 'dramatic', name: 'Dramatic Shadow', css: 'contrast(1.6) brightness(0.85) saturate(1.2)', icon: 'MOOD' },
+  { id: 'vintage_70s', name: 'Vintage 70s', css: 'sepia(0.4) contrast(0.9) brightness(1.05) saturate(1.3)', icon: 'CLASSIC' },
+  { id: 'cyber', name: 'Cyberpunk', css: 'hue-rotate(-40deg) saturate(1.6) contrast(1.3) brightness(1.1)', icon: 'NEON' },
 ];
 
 // Dot-based pose silhouettes (coordinates from 0-100)
@@ -928,11 +942,13 @@ export default function App() {
             <button onClick={toggleFullscreen} className="p-1.5 hover:text-white transition-colors" title="Full Screen">
               <Maximize size={16} className="md:w-[18px] md:h-[18px]" />
             </button>
-            <button onClick={() => setShowGrid(!showGrid)} className={`p-1.5 transition-colors ${showGrid ? 'text-accent' : 'hover:text-white'}`}>
+            <button onClick={() => setShowGrid(!showGrid)} className={`p-1.5 transition-colors relative ${showGrid ? 'text-accent' : 'hover:text-white'}`} title="Grid">
               <Grid3X3 size={16} className="md:w-[18px] md:h-[18px]" />
+              {showGrid && <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-green-500 rounded-full border border-black z-10" />}
             </button>
-            <button className="p-1.5 hover:text-white transition-colors" onClick={() => setShowSettings(!showSettings)}>
+            <button className="p-1.5 hover:text-white transition-colors relative" onClick={() => setShowSettings(!showSettings)} title="Settings">
               <Settings size={16} className="md:w-[18px] md:h-[18px]" />
+              {(timemarkEnabled || aiHumanDetection) && <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-green-500 rounded-full border border-black z-10" />}
             </button>
             <button 
               onClick={() => setUiVisible(!uiVisible)} 
@@ -1661,9 +1677,12 @@ export default function App() {
                         setShowPoseDots(!showPoseDots);
                         if (!showPoseDots) analyzeScene(); 
                       }}
-                      className={`p-2 md:p-3 rounded-full border transition-all ${showPoseDots ? 'border-accent bg-accent/20' : 'border-white/10'}`}
+                      className={`p-2 md:p-3 rounded-full border transition-all relative ${showPoseDots ? 'border-accent bg-accent/20 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'border-white/10'}`}
                       title="AI Pose Recommendation"
                     >
+                      {showPoseDots && (
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-[#111] animate-pulse" />
+                      )}
                       <Info size={18} className={showPoseDots ? 'text-accent' : 'text-white'} />
                     </motion.button>
 
@@ -1672,8 +1691,11 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
                       onClick={() => setAutoAssist(!autoAssist)}
-                      className={`p-2 md:p-3 rounded-full border transition-all ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
+                      className={`p-2 md:p-3 rounded-full border transition-all relative ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
                     >
+                      {autoAssist && (
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-[#111]" />
+                      )}
                       <Target size={18} className={autoAssist ? 'text-accent' : 'text-white'} />
                     </motion.button>
                   </>
@@ -1710,17 +1732,24 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
-                className="flex md:flex-col items-center justify-end w-full gap-2 md:gap-0.5 text-right mt-1 md:mt-0"
+                className="flex md:flex-col items-center justify-end w-full gap-2 md:gap-1 text-right mt-1 md:mt-0"
               >
-                <button 
-                  onClick={() => setPoseIndex((poseIndex + 1) % poses.length)}
-                  className="text-right group"
-                >
-                  <span className="text-[10px] text-text-dim font-bold uppercase tracking-widest block group-hover:text-accent transition-colors">Switch Pose Guide</span>
-                  <p className="text-[12px] text-white leading-tight font-mono group-hover:underline">
-                    {poses[poseIndex].name} Assist
-                  </p>
-                </button>
+                <div className="flex flex-col items-end">
+                   <div className="flex items-center gap-2">
+                     <button 
+                       onClick={() => setPoseIndex((poseIndex + 1) % poses.length)}
+                       className="p-2 rounded-lg bg-white/5 border border-white/10 hover:border-accent transition-all group relative"
+                       title="Switch Pose Guide"
+                     >
+                       <SquareUser size={16} className="text-white group-hover:text-accent" />
+                       <div className="absolute -bottom-1 -right-1 w-1.5 h-1.5 bg-green-500 rounded-full border border-[#111]" />
+                     </button>
+                     <div className="hidden md:flex flex-col items-end">
+                       <span className="text-[8px] text-text-dim font-bold uppercase tracking-tight">Active Pose</span>
+                       <span className="text-[10px] text-white font-mono leading-none">{poses[poseIndex].name}</span>
+                     </div>
+                   </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
