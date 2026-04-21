@@ -1881,11 +1881,12 @@ export default function App() {
                  <div className="flex-1 relative rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(255,77,0,0.15)] border border-white/10 group bg-[#080808] flex items-center justify-center cursor-grab active:cursor-grabbing">
                    <motion.img 
                       drag={previewZoom > 1}
-                      dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
+                      dragConstraints={{ left: -1000, right: 1000, top: -1000, bottom: 1000 }}
                       src={capturedImage} 
-                      className="max-w-full max-h-full object-contain transition-all duration-300" 
+                      className="max-w-full max-h-full object-contain" 
+                      animate={{ scale: previewZoom }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                       style={{ 
-                        scale: previewZoom,
                         filter: hdEnhance === 'HD' 
                           ? 'contrast(1.2) saturate(1.1) brightness(1.05)' 
                           : hdEnhance === 'SMOOTH' 
