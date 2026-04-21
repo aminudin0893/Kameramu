@@ -331,6 +331,7 @@ export default function App() {
   const [hdEnhance, setHdEnhance] = useState<'OFF' | 'SMOOTH' | 'HD'>('OFF');
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [previewZoom, setPreviewZoom] = useState(1);
   const [poseIndex, setPoseIndex] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -1876,19 +1877,23 @@ export default function App() {
                  </button>
                </div>
                
-               {/* High-End Image Preview Section */}
-               <div className="flex-1 relative rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(255,77,0,0.15)] border border-white/10 group bg-[#080808] flex items-center justify-center">
-                 <img src={capturedImage} 
-                    className="max-w-full max-h-full object-contain transition-all duration-500" 
-                    style={{ 
-                      filter: hdEnhance === 'HD' 
-                        ? 'contrast(1.2) saturate(1.1) brightness(1.05)' 
-                        : hdEnhance === 'SMOOTH' 
-                        ? 'saturate(1.08) brightness(1.1) contrast(0.9) blur(0.5px)' 
-                        : 'none' 
-                    }}
-                    alt="Captured" 
-                    referrerPolicy="no-referrer" />
+                 {/* High-End Image Preview Section */}
+                 <div className="flex-1 relative rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(255,77,0,0.15)] border border-white/10 group bg-[#080808] flex items-center justify-center cursor-grab active:cursor-grabbing">
+                   <motion.img 
+                      drag={previewZoom > 1}
+                      dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
+                      src={capturedImage} 
+                      className="max-w-full max-h-full object-contain transition-all duration-300" 
+                      style={{ 
+                        scale: previewZoom,
+                        filter: hdEnhance === 'HD' 
+                          ? 'contrast(1.2) saturate(1.1) brightness(1.05)' 
+                          : hdEnhance === 'SMOOTH' 
+                          ? 'saturate(1.08) brightness(1.1) contrast(0.9) blur(0.5px)' 
+                          : 'none' 
+                      }}
+                      alt="Captured" 
+                      referrerPolicy="no-referrer" />
                  
                  {/* Floating Labels */}
                  <div className="absolute top-6 left-6 hidden md:flex flex-col gap-2">
@@ -1911,7 +1916,7 @@ export default function App() {
                {/* Enhanced Action Controls */}
                <div className="flex flex-col md:flex-row gap-3 pb-4">
                  <button 
-                  onClick={() => { setCapturedImage(null); setHdEnhance('OFF'); }}
+                  onClick={() => { setCapturedImage(null); setHdEnhance('OFF'); setPreviewZoom(1); }}
                   className="flex-1 py-4 md:py-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold uppercase tracking-[0.2em] hover:bg-white/10 transition-all flex items-center justify-center gap-3 backdrop-blur-xl group active:scale-[0.98]"
                  >
                    <RotateCcw size={18} className="group-hover:-rotate-45 transition-transform" />
@@ -1926,14 +1931,29 @@ export default function App() {
                    <span className="text-[10px] md:text-xs">{hdEnhance === 'OFF' ? 'HD Filter' : hdEnhance === 'HD' ? 'Ultra HD' : 'Smooth Clear'}</span>
                  </button>
 
-                 <button 
-                  onClick={handleDownload}
-                  className="flex-[1.5] py-4 md:py-6 rounded-2xl bg-accent text-white font-bold uppercase tracking-[0.2em] hover:bg-accent/80 transition-all shadow-2xl shadow-accent/20 flex items-center justify-center gap-3 active:scale-[0.98] relative group overflow-hidden"
-                 >
-                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                   <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-                   <span className="text-[10px] md:text-xs font-black">Save Photo</span>
-                 </button>
+                 <div className="flex-[1.5] flex flex-col gap-2">
+                    <div className="flex items-center gap-3 px-4 py-2 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xl">
+                      <Maximize size={16} className="text-accent" />
+                      <input 
+                        type="range" 
+                        min={1} 
+                        max={3} 
+                        step={0.1}
+                        value={previewZoom}
+                        onChange={(e) => setPreviewZoom(Number(e.target.value))}
+                        className="flex-1 h-1 bg-white/10 appearance-none rounded-full accent-accent cursor-pointer"
+                      />
+                      <span className="text-[10px] text-white font-mono min-w-[35px] text-right">{Math.round(previewZoom * 100)}%</span>
+                    </div>
+                    <button 
+                      onClick={handleDownload}
+                      className="w-full py-4 md:py-6 rounded-2xl bg-accent text-white font-bold uppercase tracking-[0.2em] hover:bg-accent/80 transition-all shadow-2xl shadow-accent/20 flex items-center justify-center gap-3 active:scale-[0.98] relative group overflow-hidden"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                      <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
+                      <span className="text-[10px] md:text-xs font-black">Save Photo</span>
+                    </button>
+                 </div>
                </div>
             </div>
           </motion.div>
