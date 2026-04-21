@@ -617,7 +617,7 @@ export default function App() {
       
       // Professional Scan Processing (Whiten background, darken text, remove mid-tone stains)
       if (mode === 'SCAN') {
-        baseFilters = 'contrast(1.8) brightness(1.15) grayscale(1) saturate(0) sepia(0.05)';
+        baseFilters = 'contrast(1.5) brightness(1.1) saturate(1.15)';
       }
       
       const sharpFilters = baseFilters;
@@ -889,7 +889,7 @@ export default function App() {
     contrast(${1 + Math.abs(exposure) / 200})
     hue-rotate(${wb * 0.5}deg)
     saturate(${1 + iso / 10})
-    ${activeFilter.css}
+    ${mode === 'SCAN' ? 'contrast(1.5) brightness(1.1) saturate(1.15)' : activeFilter.css}
   `;
 
   if (!hasStarted) {
