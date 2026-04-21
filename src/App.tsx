@@ -140,7 +140,7 @@ const DOT_POSES = [
   { name: "Modern Minimal", points: [{x: 50, y: 40}, {x: 45, y: 45}, {x: 55, y: 45}, {x: 50, y: 60}] }
 ];
 
-function PasPhotoGuide({ size }: { size: PasPhotoSize }) {
+function PasPhotoGuide({ size, subjectBox }: { size: PasPhotoSize, subjectBox: any }) {
   const getAspectRatio = () => {
     switch(size) {
       case '2x3': return 2/3;
@@ -150,34 +150,50 @@ function PasPhotoGuide({ size }: { size: PasPhotoSize }) {
     }
   };
 
+  // Check alignment if subjectBox exists
+  // subjectBox values are 0-1000, we convert them to percentage
+  const isAligned = subjectBox && (
+    subjectBox.xmin > 200 && subjectBox.xmax < 800 &&
+    subjectBox.ymin > 100 && subjectBox.ymax < 600
+  );
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center"
+      className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center p-8"
     >
       <div 
-        className="border-2 border-dashed border-accent/40 bg-white/5 relative"
+        className={`border-4 border-dashed relative transition-colors duration-500 bg-black/10 backdrop-blur-[2px] ${isAligned ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.2)]'}`}
         style={{ 
           aspectRatio: getAspectRatio(),
-          height: '70%',
-          maxHeight: '80vh'
+          height: '80%',
+          maxHeight: '75vh'
         }}
       >
-        {/* Face Placeholder */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-           <div className="w-[45%] h-[45%] border-2 border-accent/30 rounded-full mb-[15%]" />
-           <div className="w-[65%] h-[25%] border-2 border-accent/30 rounded-t-[50%]" />
+        {/* Avatar Placeholder */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
+           <svg viewBox="0 0 100 100" className="w-[80%] h-[80%] fill-accent/20 stroke-accent stroke-[0.5]">
+             <circle cx="50" cy="35" r="18" />
+             <path d="M20,85 Q20,55 50,55 Q80,55 80,85" fill="none" />
+             <path d="M25,85 Q25,60 50,60 Q75,60 75,85" />
+           </svg>
         </div>
         
-        {/* Guide Labels */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent/80 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest whitespace-nowrap">
-          Pas Photo {size}
+        {/* Alignment Indicators */}
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1">
+          <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl transition-colors ${isAligned ? 'bg-green-500 text-white' : 'bg-red-500 text-white animate-pulse'}`}>
+            {isAligned ? 'Subject Aligned' : 'Align Subject'}
+          </div>
+          <span className="text-[10px] font-bold text-white drop-shadow-md">PAS PHOTO {size}</span>
         </div>
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-accent/60 text-[8px] font-bold uppercase tracking-widest text-center w-full">
-          Align face to guide
-        </div>
+
+        {/* Framing Corners */}
+        <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-white/30" />
+        <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-white/30" />
+        <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-white/30" />
+        <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-white/30" />
       </div>
     </motion.div>
   );
@@ -188,35 +204,44 @@ function DotSilhouette({ poseIndex }: { poseIndex: number }) {
   return (
     <motion.div 
       initial={{ opacity: 0 }}
-      animate={{ opacity: 0.6 }}
+      animate={{ opacity: 0.8 }}
       exit={{ opacity: 0 }}
       className="absolute inset-0 pointer-events-none z-30"
     >
-      <svg viewBox="0 0 100 100" className="w-full h-full">
+      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_10px_rgba(255,77,0,0.5)]">
+        {/* Faint Humanoid Body Background */}
+        <path 
+           d="M50,10 Q50,5 50,10 Q42,10 42,18 Q42,25 50,25 Q58,25 58,18 Q58,10 50,10 M40,30 L60,30 L65,60 L58,95 L42,95 L35,60 Z" 
+           fill="#FF4D00" 
+           opacity="0.05"
+        />
+        
         {pose.points.map((p, i) => (
-          <motion.circle
-            key={i}
-            cx={p.x}
-            cy={p.y}
-            r="0.8"
-            fill="#FF4D00"
-            initial={{ scale: 0 }}
-            animate={{ scale: [0, 1.5, 1] }}
-            transition={{ delay: i * 0.05 }}
-          />
+          <g key={i}>
+            <motion.circle
+              cx={p.x}
+              cy={p.y}
+              r="1.4"
+              fill="#FF4D00"
+              initial={{ scale: 0 }}
+              animate={{ scale: [0, 1.2, 1] }}
+              transition={{ delay: i * 0.03 }}
+            />
+            <circle cx={p.x} cy={p.y} r="1.4" fill="none" stroke="white" strokeWidth="0.2" opacity="0.5" />
+          </g>
         ))}
         {/* Connecting Lines for "Skeleton" look */}
         <polyline
           points={pose.points.map(p => `${p.x},${p.y}`).join(' ')}
           fill="none"
           stroke="#FF4D00"
-          strokeWidth="0.1"
-          strokeDasharray="1 1"
-          opacity="0.3"
+          strokeWidth="0.3"
+          opacity="0.6"
         />
       </svg>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-[150px] bg-accent/20 backdrop-blur-md px-3 py-1 rounded-full border border-accent/40">
-        <span className="text-[10px] text-accent font-bold uppercase tracking-widest">{pose.name}</span>
+      <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 bg-accent/30 backdrop-blur-xl px-4 py-1.5 rounded-full border border-accent/50 flex flex-col items-center">
+        <span className="text-[10px] text-white font-black uppercase tracking-[0.2em]">{pose.name}</span>
+        <span className="text-[7px] text-accent-foreground/70 uppercase font-bold tracking-tighter">Follow the Dots</span>
       </div>
     </motion.div>
   );
@@ -1193,7 +1218,7 @@ export default function App() {
 
           <AnimatePresence>
             {mode === 'PAS_PHOTO' && (
-              <PasPhotoGuide size={pasPhotoSize} />
+              <PasPhotoGuide size={pasPhotoSize} subjectBox={subjectBox} />
             )}
             {(showPoseDots || mode === 'FREE_POSE') && (
               <DotSilhouette poseIndex={mode === 'FREE_POSE' ? poseIndex : (recommendedPoseIdx ?? 0)} />
@@ -1385,7 +1410,7 @@ export default function App() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="flex gap-6 md:gap-10 text-[11px] font-bold tracking-[0.15em] uppercase"
+                  className="flex gap-4 md:gap-8 text-[9px] md:text-[11px] font-bold tracking-[0.1em] uppercase overflow-x-auto no-scrollbar w-full max-w-[90vw] justify-start md:justify-center px-4"
                 >
                   {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE'] as Mode[]).map(m => (
                     <button 
@@ -1394,11 +1419,11 @@ export default function App() {
                         setMode(m);
                         if (m === 'FREE_POSE') setShowPoseDots(true);
                       }}
-                      className={`relative transition-all pt-2 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white pb-2'}`}
+                      className={`relative transition-all pt-2 pb-3 shrink-0 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white'}`}
                     >
                       <span className="whitespace-nowrap">{m.replace('_', ' ')}</span>
                       {mode === m && (
-                        <motion.div layoutId="modeDot" className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent" />
+                        <motion.div layoutId="modeDot" className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent" />
                       )}
                     </button>
                   ))}
