@@ -17,6 +17,7 @@ import {
   Sparkles,
   Info,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   Maximize,
   Download,
@@ -64,8 +65,9 @@ const toggleFullscreen = () => {
   }
 };
 
-type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO';
+type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO' | 'PAS_PHOTO' | 'FREE_POSE';
 type FocusMode = 'FOCUS_SUBJECT' | 'BLUR_SUBJECT';
+type PasPhotoSize = '2x3' | '3x4' | '4x6';
 
 interface FilterPreset {
   id: string;
@@ -86,28 +88,100 @@ const FILTER_PRESETS: FilterPreset[] = [
 
 // Dot-based pose silhouettes (coordinates from 0-100)
 const DOT_POSES = [
-  {
-    name: "Golden Ratio Stand",
-    points: [
-      {x: 50, y: 15}, {x: 50, y: 30}, {x: 40, y: 45}, {x: 60, y: 45},
-      {x: 35, y: 65}, {x: 65, y: 65}, {x: 50, y: 50}, {x: 45, y: 85}, {x: 55, y: 85}
-    ]
-  },
-  {
-    name: "Classic S-Curve",
-    points: [
-      {x: 55, y: 12}, {x: 50, y: 28}, {x: 45, y: 44}, {x: 50, y: 60},
-      {x: 55, y: 76}, {x: 45, y: 92}, {x: 40, y: 35}, {x: 65, y: 40}
-    ]
-  },
-  {
-    name: "Fashion Lean",
-    points: [
-      {x: 40, y: 10}, {x: 42, y: 25}, {x: 45, y: 45}, {x: 50, y: 70},
-      {x: 55, y: 90}, {x: 65, y: 30}, {x: 70, y: 55}, {x: 30, y: 50}
-    ]
-  }
+  { name: "Golden Ratio Stand", points: [{x: 50, y: 15}, {x: 50, y: 30}, {x: 40, y: 45}, {x: 60, y: 45}, {x: 35, y: 65}, {x: 65, y: 65}, {x: 50, y: 50}, {x: 45, y: 85}, {x: 55, y: 85}] },
+  { name: "Classic S-Curve", points: [{x: 55, y: 12}, {x: 50, y: 28}, {x: 45, y: 44}, {x: 50, y: 60}, {x: 55, y: 76}, {x: 45, y: 92}, {x: 40, y: 35}, {x: 65, y: 40}] },
+  { name: "Fashion Lean", points: [{x: 40, y: 10}, {x: 42, y: 25}, {x: 45, y: 45}, {x: 50, y: 70}, {x: 55, y: 90}, {x: 65, y: 30}, {x: 70, y: 55}, {x: 30, y: 50}] },
+  { name: "Sultry Look", points: [{x: 52, y: 18}, {x: 48, y: 35}, {x: 55, y: 50}, {x: 45, y: 65}, {x: 50, y: 85}, {x: 30, y: 40}, {x: 70, y: 42}] },
+  { name: "Street Walk", points: [{x: 45, y: 15}, {x: 48, y: 32}, {x: 52, y: 50}, {x: 45, y: 70}, {x: 55, y: 90}, {x: 60, y: 40}, {x: 35, y: 45}] },
+  { name: "Confident Sit", points: [{x: 50, y: 30}, {x: 50, y: 45}, {x: 40, y: 55}, {x: 60, y: 55}, {x: 35, y: 75}, {x: 65, y: 75}, {x: 45, y: 90}, {x: 55, y: 90}] },
+  { name: "Over Shoulder", points: [{x: 60, y: 15}, {x: 55, y: 35}, {x: 45, y: 50}, {x: 50, y: 80}, {x: 35, y: 40}, {x: 25, y: 60}] },
+  { name: "Hands on Hips", points: [{x: 50, y: 15}, {x: 50, y: 30}, {x: 30, y: 45}, {x: 70, y: 45}, {x: 50, y: 50}, {x: 45, y: 85}, {x: 55, y: 85}] },
+  { name: "Soft Lean", points: [{x: 35, y: 15}, {x: 40, y: 35}, {x: 50, y: 60}, {x: 60, y: 85}, {x: 70, y: 35}] },
+  { name: "Dynamic Jump", points: [{x: 50, y: 10}, {x: 55, y: 25}, {x: 40, y: 40}, {x: 70, y: 40}, {x: 30, y: 70}, {x: 80, y: 70}] },
+  { name: "Profile Pose", points: [{x: 40, y: 15}, {x: 42, y: 35}, {x: 40, y: 60}, {x: 45, y: 90}, {x: 55, y: 40}] },
+  { name: "Hands in Pockets", points: [{x: 50, y: 15}, {x: 50, y: 30}, {x: 42, y: 48}, {x: 58, y: 48}, {x: 45, y: 85}, {x: 55, y: 85}] },
+  { name: "Crossed Arms", points: [{x: 50, y: 15}, {x: 50, y: 35}, {x: 40, y: 38}, {x: 60, y: 38}, {x: 50, y: 90}] },
+  { name: "The Thinker", points: [{x: 45, y: 20}, {x: 48, y: 35}, {x: 55, y: 50}, {x: 40, y: 55}, {x: 50, y: 80}] },
+  { name: "Squat Pose", points: [{x: 50, y: 40}, {x: 45, y: 55}, {x: 55, y: 55}, {x: 35, y: 75}, {x: 65, y: 75}] },
+  { name: "Back View", points: [{x: 50, y: 15}, {x: 50, y: 40}, {x: 40, y: 90}, {x: 60, y: 90}] },
+  { name: "Side Lean Wall", points: [{x: 30, y: 15}, {x: 35, y: 40}, {x: 40, y: 70}, {x: 45, y: 95}] },
+  { name: "Looking Up", points: [{x: 50, y: 10}, {x: 50, y: 35}, {x: 45, y: 90}, {x: 55, y: 90}] },
+  { name: "Crouch Shot", points: [{x: 50, y: 50}, {x: 40, y: 65}, {x: 60, y: 65}, {x: 50, y: 90}] },
+  { name: "Hands up High", points: [{x: 50, y: 30}, {x: 30, y: 10}, {x: 70, y: 10}, {x: 45, y: 90}, {x: 55, y: 90}] },
+  { name: "Elegant Stand", points: [{x: 50, y: 12}, {x: 50, y: 30}, {x: 45, y: 50}, {x: 52, y: 75}, {x: 48, y: 95}] },
+  { name: "City Vibe", points: [{x: 55, y: 15}, {x: 52, y: 35}, {x: 40, y: 55}, {x: 65, y: 55}] },
+  { name: "Playful Turn", points: [{x: 45, y: 15}, {x: 55, y: 30}, {x: 35, y: 50}, {x: 65, y: 70}] },
+  { name: "Model Walk", points: [{x: 50, y: 10}, {x: 50, y: 30}, {x: 45, y: 60}, {x: 55, y: 90}] },
+  { name: "Silly Pose", points: [{x: 50, y: 20}, {x: 35, y: 40}, {x: 65, y: 40}, {x: 40, y: 80}, {x: 60, y: 80}] },
+  { name: "Chill Mode", points: [{x: 50, y: 25}, {x: 40, y: 45}, {x: 60, y: 45}, {x: 50, y: 85}] },
+  { name: "High Fashion", points: [{x: 48, y: 12}, {x: 52, y: 28}, {x: 40, y: 55}, {x: 70, y: 45}] },
+  { name: "Swaying Pose", points: [{x: 50, y: 15}, {x: 45, y: 40}, {x: 55, y: 65}, {x: 50, y: 90}] },
+  { name: "Hidden Face", points: [{x: 50, y: 15}, {x: 45, y: 20}, {x: 55, y: 20}, {x: 50, y: 50}] },
+  { name: "Retro Look", points: [{x: 50, y: 20}, {x: 40, y: 40}, {x: 60, y: 60}, {x: 50, y: 85}] },
+  { name: "Minimalist", points: [{x: 50, y: 10}, {x: 50, y: 90}] },
+  { name: "A-Frame Stand", points: [{x: 50, y: 15}, {x: 40, y: 90}, {x: 60, y: 90}] },
+  { name: "V-Shape Arms", points: [{x: 50, y: 35}, {x: 30, y: 15}, {x: 70, y: 15}] },
+  { name: "L-Pose Step", points: [{x: 45, y: 15}, {x: 45, y: 60}, {x: 65, y: 60}] },
+  { name: "T-Pose Assist", points: [{x: 50, y: 15}, {x: 20, y: 40}, {x: 80, y: 40}, {x: 50, y: 85}] },
+  { name: "Zig Zag Look", points: [{x: 40, y: 10}, {x: 60, y: 30}, {x: 40, y: 50}, {x: 60, y: 70}] },
+  { name: "Circle Frame", points: [{x: 50, y: 20}, {x: 30, y: 50}, {x: 70, y: 50}, {x: 50, y: 80}] },
+  { name: "Stair Pose", points: [{x: 40, y: 20}, {x: 50, y: 40}, {x: 60, y: 60}, {x: 70, y: 80}] },
+  { name: "Diagonal Lean", points: [{x: 20, y: 20}, {x: 50, y: 50}, {x: 80, y: 80}] },
+  { name: "Center Focus", points: [{x: 50, y: 50}] },
+  { name: "Dual Subject 1", points: [{x: 30, y: 30}, {x: 70, y: 30}] },
+  { name: "Dual Subject 2", points: [{x: 30, y: 70}, {x: 70, y: 70}] },
+  { name: "Pyramid Focus", points: [{x: 50, y: 20}, {x: 30, y: 80}, {x: 70, y: 80}] },
+  { name: "Dynamic S", points: [{x: 50, y: 10}, {x: 70, y: 30}, {x: 30, y: 60}, {x: 50, y: 90}] },
+  { name: "Corner Frame", points: [{x: 10, y: 10}, {x: 10, y: 30}, {x: 30, y: 10}] },
+  { name: "Box Frame", points: [{x: 25, y: 25}, {x: 75, y: 25}, {x: 75, y: 75}, {x: 25, y: 75}] },
+  { name: "Cross Focus", points: [{x: 50, y: 20}, {x: 50, y: 80}, {x: 20, y: 50}, {x: 80, y: 50}] },
+  { name: "Spiral Flow", points: [{x: 50, y: 50}, {x: 60, y: 40}, {x: 50, y: 30}, {x: 40, y: 40}, {x: 30, y: 50}] },
+  { name: "Geometric 1", points: [{x: 10, y: 10}, {x: 90, y: 90}, {x: 10, y: 90}, {x: 90, y: 10}] },
+  { name: "Modern Minimal", points: [{x: 50, y: 40}, {x: 45, y: 45}, {x: 55, y: 45}, {x: 50, y: 60}] }
 ];
+
+function PasPhotoGuide({ size }: { size: PasPhotoSize }) {
+  const getAspectRatio = () => {
+    switch(size) {
+      case '2x3': return 2/3;
+      case '3x4': return 3/4;
+      case '4x6': return 4/6;
+      default: return 3/4;
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center"
+    >
+      <div 
+        className="border-2 border-dashed border-accent/40 bg-white/5 relative"
+        style={{ 
+          aspectRatio: getAspectRatio(),
+          height: '70%',
+          maxHeight: '80vh'
+        }}
+      >
+        {/* Face Placeholder */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+           <div className="w-[45%] h-[45%] border-2 border-accent/30 rounded-full mb-[15%]" />
+           <div className="w-[65%] h-[25%] border-2 border-accent/30 rounded-t-[50%]" />
+        </div>
+        
+        {/* Guide Labels */}
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent/80 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest whitespace-nowrap">
+          Pas Photo {size}
+        </div>
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-accent/60 text-[8px] font-bold uppercase tracking-widest text-center w-full">
+          Align face to guide
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 function DotSilhouette({ poseIndex }: { poseIndex: number }) {
   const pose = DOT_POSES[poseIndex] || DOT_POSES[0];
@@ -155,6 +229,7 @@ export default function App() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [mode, setMode] = useState<Mode>('PHOTO');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [pasPhotoSize, setPasPhotoSize] = useState<PasPhotoSize>('3x4');
   const [showGrid, setShowGrid] = useState(false);
   const [autoAssist, setAutoAssist] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -1117,18 +1192,12 @@ export default function App() {
           </AnimatePresence>
 
           <AnimatePresence>
-            <motion.div 
-              key={poseIndex}
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 0.2 }}
-              className="absolute inset-0 pointer-events-none flex items-center justify-center"
-            >
-               <div className={`w-1/2 h-2/3 border border-dashed border-white flex flex-col items-center justify-center ${poses[poseIndex].shape} transition-all duration-1000`}>
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-center px-4">
-                    Pose Guide:<br/>{poses[poseIndex].name}
-                  </span>
-               </div>
-            </motion.div>
+            {mode === 'PAS_PHOTO' && (
+              <PasPhotoGuide size={pasPhotoSize} />
+            )}
+            {(showPoseDots || mode === 'FREE_POSE') && (
+              <DotSilhouette poseIndex={mode === 'FREE_POSE' ? poseIndex : (recommendedPoseIdx ?? 0)} />
+            )}
           </AnimatePresence>
 
           {/* Portrait Blur Effect - Now driven by focus slider and tap point */}
@@ -1318,19 +1387,75 @@ export default function App() {
                   exit={{ opacity: 0, y: 10 }}
                   className="flex gap-6 md:gap-10 text-[11px] font-bold tracking-[0.15em] uppercase"
                 >
-                  {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO'] as Mode[]).map(m => (
+                  {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE'] as Mode[]).map(m => (
                     <button 
                       key={m}
-                      onClick={() => setMode(m)}
+                      onClick={() => {
+                        setMode(m);
+                        if (m === 'FREE_POSE') setShowPoseDots(true);
+                      }}
                       className={`relative transition-all pt-2 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white pb-2'}`}
                     >
-                      {m}
+                      <span className="whitespace-nowrap">{m.replace('_', ' ')}</span>
                       {mode === m && (
                         <motion.div layoutId="modeDot" className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent" />
                       )}
                     </button>
                   ))}
                 </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Sub-selectors for Pas Photo and Free Pose */}
+            <AnimatePresence>
+              {uiVisible && (
+                <div className="h-6">
+                  {mode === 'PAS_PHOTO' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 5 }}
+                      className="flex gap-4"
+                    >
+                      {(['2x3', '3x4', '4x6'] as PasPhotoSize[]).map(s => (
+                        <button 
+                          key={s}
+                          onClick={() => setPasPhotoSize(s)}
+                          className={`text-[9px] font-bold px-2 py-0.5 rounded-md transition-colors ${pasPhotoSize === s ? 'bg-accent text-white' : 'text-text-dim hover:text-white'}`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                  {mode === 'FREE_POSE' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 5 }}
+                      className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[300px] px-4"
+                    >
+                      <button 
+                        onClick={() => setPoseIndex((prev) => (prev - 1 + DOT_POSES.length) % DOT_POSES.length)}
+                        className="p-1 text-white/20 hover:text-white transition-colors"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <div className="flex flex-col items-center min-w-[80px]">
+                        <span className="text-[8px] text-accent font-bold uppercase tracking-widest leading-none mb-1">Template</span>
+                        <span className="text-[10px] text-white font-mono whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
+                          {poseIndex + 1}/{DOT_POSES.length}: {DOT_POSES[poseIndex].name}
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => setPoseIndex((prev) => (prev + 1) % DOT_POSES.length)}
+                        className="p-1 text-white/20 hover:text-white transition-colors"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
               )}
             </AnimatePresence>
 
