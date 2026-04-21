@@ -553,19 +553,23 @@ export default function App() {
         
         if (mctx) {
           if (aiHumanDetection && subjectBox) {
-            // Sophisticated Human Detection Mask
+            // High-precision Professional Blur Mask
             const bx = subjectBox.xmin * video.videoWidth / 1000;
             const by = subjectBox.ymin * video.videoHeight / 1000;
             const bw = (subjectBox.xmax - subjectBox.xmin) * video.videoWidth / 1000;
             const bh = (subjectBox.ymax - subjectBox.ymin) * video.videoHeight / 1000;
             
-            // Draw a smooth rounded box for the human
+            // 1. Draw solid core
             mctx.fillStyle = 'white';
-            const radius = Math.min(bw, bh) * 0.3;
+            const radius = Math.min(bw, bh) * 0.4;
             mctx.beginPath();
-            mctx.roundRect(bx - radius/2, by - radius/2, bw + radius, bh + radius, radius);
+            mctx.roundRect(bx, by, bw, bh, radius);
             mctx.fill();
-            // Blurring the mask for soft edges
+
+            // 2. Add exponential falloff blur for natural bokeh look
+            mctx.globalCompositeOperation = 'source-over';
+            mctx.filter = 'blur(40px)';
+            mctx.drawImage(maskCanvas, 0, 0);
             mctx.filter = 'blur(20px)';
             mctx.drawImage(maskCanvas, 0, 0);
           } else {
@@ -638,6 +642,9 @@ export default function App() {
       
       // Burn-in Timemark if enabled
       if (timemarkEnabled) {
+        // Reset transformation matrix so text is not mirrored when facingMode is 'user'
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+
         ctx.font = `bold ${timemarkFontSize}px "JetBrains Mono", monospace`;
         ctx.fillStyle = 'white';
         ctx.shadowBlur = 6;
@@ -1093,18 +1100,62 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* Tap-to-Focus Ring */}
+          {/* Professional Focus Tracking Frame */}
+          {aiHumanDetection && subjectBox && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{
+                left: `${subjectBox.xmin/10}%`,
+                top: `${subjectBox.ymin/10}%`,
+                width: `${(subjectBox.xmax - subjectBox.xmin)/10}%`,
+                height: `${(subjectBox.ymax - subjectBox.ymin)/10}%`
+              }}
+              className="absolute border-2 border-accent/60 z-40 pointer-events-none transition-all duration-300"
+            >
+              {/* Corner Accents */}
+              <div className="absolute -top-1 -left-1 w-4 h-4 border-l-4 border-t-4 border-accent" />
+              <div className="absolute -top-1 -right-1 w-4 h-4 border-r-4 border-t-4 border-accent" />
+              <div className="absolute -bottom-1 -left-1 w-4 h-4 border-l-4 border-b-4 border-accent" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 border-r-4 border-b-4 border-accent" />
+              
+              <div className="absolute top-2 left-2 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-accent animate-ping" />
+                <span className="text-[8px] text-accent font-black uppercase tracking-[0.2em] bg-black/60 px-1 py-0.5 rounded">Tracking Locked</span>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Tap-to-Focus Ring & Depth Grid */}
           <AnimatePresence>
             {showFocusRing && (
-              <motion.div 
-                initial={{ scale: 2, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ opacity: 0 }}
-                style={{ left: `${focusPoint.x}%`, top: `${focusPoint.y}%` }}
-                className="absolute w-16 h-16 border-2 border-accent rounded-full -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none"
-              >
-                <div className="absolute inset-0 border border-accent/30 rounded-full animate-ping" />
-              </motion.div>
+              <>
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 0.15 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 pointer-events-none grid grid-cols-6 grid-rows-6"
+                >
+                  {[...Array(35)].map((_, i) => (
+                    <div key={i} className="border-[0.5px] border-accent/20" />
+                  ))}
+                </motion.div>
+                <motion.div 
+                  initial={{ scale: 2, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  style={{ left: `${focusPoint.x}%`, top: `${focusPoint.y}%` }}
+                  className="absolute w-20 h-20 border border-accent/40 rounded-full -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none flex items-center justify-center"
+                >
+                  <div className="w-16 h-16 border-2 border-accent rounded-full" />
+                  <div className="absolute inset-0 border border-accent/20 rounded-full animate-ping" />
+                  
+                  {/* Focus Metadata */}
+                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
+                    <span className="text-[8px] text-accent font-mono font-bold uppercase py-0.5 px-1 bg-black/40">AF-S LOCK {(focus/10).toFixed(1)}m</span>
+                  </div>
+                </motion.div>
+              </>
             )}
           </AnimatePresence>
           {cameraError ? (
@@ -1480,28 +1531,34 @@ export default function App() {
           <div className="flex flex-col items-center gap-4 py-2">
             <AnimatePresence>
               {uiVisible && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="flex gap-4 md:gap-8 text-[9px] md:text-[11px] font-bold tracking-[0.1em] uppercase overflow-x-auto no-scrollbar w-full max-w-[90vw] justify-start md:justify-center px-4"
-                >
-                  {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE'] as Mode[]).map(m => (
-                    <button 
-                      key={m}
-                      onClick={() => {
-                        setMode(m);
-                        if (m === 'FREE_POSE') setShowPoseDots(true);
-                      }}
-                      className={`relative transition-all pt-2 pb-3 shrink-0 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white'}`}
-                    >
-                      <span className="whitespace-nowrap">{m.replace('_', ' ')}</span>
-                      {mode === m && (
-                        <motion.div layoutId="modeDot" className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent" />
-                      )}
-                    </button>
-                  ))}
-                </motion.div>
+                <div className="relative w-full max-w-[90vw] overflow-hidden">
+                  {/* Fading Edges for Mobile Scroll */}
+                  <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-bg to-transparent z-10 pointer-events-none md:hidden" />
+                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-bg to-transparent z-10 pointer-events-none md:hidden" />
+                  
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="flex gap-4 md:gap-8 text-[9px] md:text-[11px] font-bold tracking-[0.1em] uppercase overflow-x-auto no-scrollbar justify-start md:justify-center px-8"
+                  >
+                    {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE'] as Mode[]).map(m => (
+                      <button 
+                        key={m}
+                        onClick={() => {
+                          setMode(m);
+                          if (m === 'FREE_POSE') setShowPoseDots(true);
+                        }}
+                        className={`relative transition-all pt-2 pb-3 shrink-0 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white'}`}
+                      >
+                        <span className="whitespace-nowrap">{m.replace('_', ' ')}</span>
+                        {mode === m && (
+                          <motion.div layoutId="modeDot" className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                </div>
               )}
             </AnimatePresence>
 
