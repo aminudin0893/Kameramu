@@ -69,7 +69,7 @@ const toggleFullscreen = () => {
   }
 };
 
-type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO' | 'PAS_PHOTO' | 'FREE_POSE' | 'SCAN' | 'CUTOUT' | 'BW_BG';
+type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO' | 'PAS_PHOTO' | 'FREE_POSE' | 'SCAN';
 type FocusMode = 'FOCUS_SUBJECT' | 'BLUR_SUBJECT';
 type PasPhotoSize = '2x3' | '3x4' | '4x6';
 
@@ -363,12 +363,13 @@ export default function App() {
   const [aiHumanDetection, setAiHumanDetection] = useState(false);
   const [subjectBox, setSubjectBox] = useState<{ymin:number, xmin:number, ymax:number, xmax:number} | null>(null);
 
+  // AI Human Detection Auto-activation for iPhone Filters
   useEffect(() => {
-    if (activeFilter.id.startsWith('ip_') || mode === 'CUTOUT' || mode === 'BW_BG') {
+    if (activeFilter.id.startsWith('ip_')) {
       setAiHumanDetection(true);
-      if (focus === 0 && activeFilter.id.startsWith('ip_')) setFocus(50); // Set default blur thickness for iPhone mode
+      if (focus === 0) setFocus(50); // Set default blur thickness for iPhone mode
     }
-  }, [activeFilter.id, mode]);
+  }, [activeFilter.id]);
 
   const handleViewfinderTap = (e: React.MouseEvent | React.TouchEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -622,41 +623,7 @@ export default function App() {
       const sharpFilters = baseFilters;
       const blurredFilters = `${sharpFilters} blur(${blurVal}px)`;
       
-      if (mode === 'CUTOUT') {
-        // Transparent BG: Only draw subject if mask exists
-        ctx.clearRect(0, 0, canvas.width, canvas.height); 
-        
-        const subjectCanvas = document.createElement('canvas');
-        subjectCanvas.width = video.videoWidth;
-        subjectCanvas.height = video.videoHeight;
-        const sctx = subjectCanvas.getContext('2d');
-        if (sctx) {
-          sctx.filter = sharpFilters;
-          sctx.drawImage(video, 0, 0);
-          sctx.globalCompositeOperation = 'destination-in';
-          sctx.drawImage(maskCanvas, 0, 0);
-          
-          ctx.drawImage(subjectCanvas, 0, 0);
-        }
-      } else if (mode === 'BW_BG') {
-        // B&W BG: Draw grayscale version as background, color subject on top
-        ctx.filter = `grayscale(1) brightness(0.9) ${sharpFilters}`;
-        ctx.drawImage(video, 0, 0);
-        
-        const colorCanvas = document.createElement('canvas');
-        colorCanvas.width = video.videoWidth;
-        colorCanvas.height = video.videoHeight;
-        const cctx = colorCanvas.getContext('2d');
-        if (cctx) {
-          cctx.filter = sharpFilters;
-          cctx.drawImage(video, 0, 0);
-          cctx.globalCompositeOperation = 'destination-in';
-          cctx.drawImage(maskCanvas, 0, 0);
-          
-          ctx.filter = 'none';
-          ctx.drawImage(colorCanvas, 0, 0);
-        }
-      } else if (blurVal > 0) {
+      if (blurVal > 0) {
         // Mode 1: Focus Subject (Subject is Sharp), Mode 2: Blur Subject (Subject is Blur)
         const isBlurSubject = focusMode === 'BLUR_SUBJECT';
         
@@ -788,21 +755,18 @@ export default function App() {
         ctx.fillText(address, 40, video.videoHeight - (timemarkFontSize * 1.875));
       }
 
-      setCapturedImage(mode === 'CUTOUT' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.95)); // High Quality
+      setCapturedImage(canvas.toDataURL('image/jpeg', 0.95)); // High Quality
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualTime, manualTimeValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode, focusMode, aiHumanDetection, subjectBox, mode]);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualTime, manualTimeValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode, focusMode, aiHumanDetection, subjectBox]);
 
   const handleDownload = async () => {
     if (!capturedImage) return;
-    const isPng = capturedImage.startsWith('data:image/png');
-    const ext = isPng ? "png" : "jpg";
-    
     if (hdEnhance === 'OFF') {
       const link = document.createElement('a');
       link.href = capturedImage;
-      link.download = `LUMIX_PRO_MASTER.${ext}`;
+      link.download = "LUMIX_PRO_MASTER.jpg";
       link.click();
       return;
     }
@@ -823,8 +787,8 @@ export default function App() {
       }
       ctx.drawImage(img, 0, 0);
       const link = document.createElement('a');
-      link.href = isPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.98);
-      link.download = `LUMIX_PRO_${hdEnhance}_ENHANCED.${ext}`;
+      link.href = canvas.toDataURL('image/jpeg', 0.98);
+      link.download = `LUMIX_PRO_${hdEnhance}_ENHANCED.jpg`;
       link.click();
     }
   };
@@ -1721,7 +1685,7 @@ export default function App() {
                     exit={{ opacity: 0, y: 10 }}
                     className="flex gap-4 md:gap-8 text-[9px] md:text-[11px] font-bold tracking-[0.1em] uppercase overflow-x-auto no-scrollbar justify-start md:justify-center px-8"
                   >
-                    {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE', 'SCAN', 'CUTOUT', 'BW_BG'] as Mode[]).map(m => (
+                    {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE', 'SCAN'] as Mode[]).map(m => (
                       <button 
                         key={m}
                         onClick={() => {
