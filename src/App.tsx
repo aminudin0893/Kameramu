@@ -1091,7 +1091,11 @@ export default function App() {
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 50 }}
-                className="absolute right-20 md:right-24 top-1/2 -translate-y-1/2 z-50 bg-panel border border-ui-border rounded-2xl p-2 flex flex-col gap-2 backdrop-blur-xl max-h-[70vh] overflow-y-auto no-scrollbar"
+                className="absolute right-20 md:right-24 top-1/2 -translate-y-1/2 z-50 bg-panel border border-ui-border rounded-2xl p-2 flex flex-col gap-2 backdrop-blur-xl max-h-[45vh] overflow-y-auto custom-scrollbar pr-3 scroll-smooth"
+                style={{ 
+                  maskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)'
+                }}
               >
                 {FILTER_PRESETS.map((f) => (
                   <button 
