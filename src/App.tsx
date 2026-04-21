@@ -13,6 +13,7 @@ import {
   Focus, 
   Thermometer, 
   RotateCcw,
+  RotateCw,
   Sparkles,
   Info,
   ChevronRight,
@@ -64,6 +65,7 @@ const toggleFullscreen = () => {
 };
 
 type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO';
+type FocusMode = 'FOCUS_SUBJECT' | 'BLUR_SUBJECT';
 
 interface FilterPreset {
   id: string;
@@ -74,13 +76,12 @@ interface FilterPreset {
 
 const FILTER_PRESETS: FilterPreset[] = [
   { id: 'standard', name: 'Standard', css: '', icon: 'Standard' },
-  { id: 'vivid', name: 'Vivid', css: 'saturate(1.4) contrast(1.1) brightness(1.05)', icon: 'Vibrant' },
-  { id: 'fresh', name: 'Fresh', css: 'brightness(1.1) saturate(1.1) hue-rotate(-5deg) contrast(1.05) sepia(0.05)', icon: 'Clear' },
+  { id: 'vibrant', name: 'Vibrant', css: 'saturate(1.4) contrast(1.1) brightness(1.05)', icon: 'Vibrant' },
+  { id: 'iphone_vibrant', name: 'iPhone Vibrant', css: 'saturate(1.5) contrast(1.1) brightness(1.02) sepia(0.05)', icon: 'Smart' },
+  { id: 'iphone_warm', name: 'iPhone Warm', css: 'sepia(0.15) saturate(1.2) contrast(1.05) brightness(1.02)', icon: 'Warm' },
+  { id: 'iphone_cool', name: 'iPhone Cool', css: 'hue-rotate(-5deg) saturate(1.1) contrast(1.05)', icon: 'Cool' },
   { id: 'cinematic', name: 'Cinematic', css: 'contrast(1.2) saturate(0.85) sepia(0.2) hue-rotate(5deg)', icon: 'Cinema' },
-  { id: 'vintage', name: 'Vintage', css: 'sepia(0.35) contrast(0.85) brightness(1.1) saturate(0.7) hue-rotate(-10deg)', icon: 'Retro' },
   { id: 'noir', name: 'Noir', css: 'grayscale(1) contrast(1.7) brightness(0.85)', icon: 'Deep B&W' },
-  { id: 'lomo', name: 'Lomo', css: 'contrast(1.4) saturate(1.6) brightness(0.9) hue-rotate(10deg) sepia(0.1)', icon: 'Hipster' },
-  { id: 'dreamy', name: 'Dreamy', css: 'brightness(1.15) saturate(0.8) blur(0.4px) contrast(0.85) opacity(0.95)', icon: 'Soft' },
 ];
 
 // Dot-based pose silhouettes (coordinates from 0-100)
@@ -186,6 +187,9 @@ export default function App() {
   // Filter State
   const [activeFilter, setActiveFilter] = useState<FilterPreset>(FILTER_PRESETS[0]);
   const [showFilters, setShowFilters] = useState(false);
+  const [focusMode, setFocusMode] = useState<FocusMode>('FOCUS_SUBJECT');
+  const [aiHumanDetection, setAiHumanDetection] = useState(false);
+  const [subjectBox, setSubjectBox] = useState<{ymin:number, xmin:number, ymax:number, xmax:number} | null>(null);
 
   const handleViewfinderTap = (e: React.MouseEvent | React.TouchEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -197,6 +201,9 @@ export default function App() {
     
     setFocusPoint({ x, y });
     setShowFocusRing(true);
+    // When tapping, we might want to toggle the focus mode if tapped near same area, 
+    // or just reset subject box to manual mode
+    setSubjectBox(null); 
     setTimeout(() => setShowFocusRing(false), 800);
   };
 
@@ -387,16 +394,19 @@ export default function App() {
     }
   }, [torchOn, stream]);
 
-  // Handle Auto-Assist
+  // Handle Auto-Assist & Continuous Tracking
   useEffect(() => {
     let interval: any;
-    if (autoAssist && !aiAnalyzing) {
+    // Frequency increases if Human Detection is on for "continuous" tracking feel
+    const frequency = aiHumanDetection ? 4000 : 10000;
+    
+    if ((autoAssist || aiHumanDetection) && !aiAnalyzing) {
       interval = setInterval(() => {
         analyzeScene();
-      }, 10000); // Analyze every 10 seconds if auto-assist is on
+      }, frequency);
     }
     return () => clearInterval(interval);
-  }, [autoAssist, aiAnalyzing]);
+  }, [autoAssist, aiHumanDetection, aiAnalyzing]);
 
   const toggleCamera = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
@@ -426,46 +436,89 @@ export default function App() {
       const blurredFilters = `${sharpFilters} blur(${blurVal}px)`;
       
       if (blurVal > 0) {
-        // 1. Draw blurred version everywhere
-        ctx.filter = blurredFilters;
-        ctx.drawImage(video, 0, 0);
+        // Mode 1: Focus Subject (Subject is Sharp), Mode 2: Blur Subject (Subject is Blur)
+        const isBlurSubject = focusMode === 'BLUR_SUBJECT';
         
-        // 2. Overlay sharp subject using a soft radial clipping mask for smooth transition
-        // Flip X coordinate for masking if camera is mirrored (front camera)
-        const effectiveX = facingMode === 'user' ? (100 - focusPoint.x) : focusPoint.x;
-        const fX = (effectiveX / 100) * video.videoWidth;
-        const fY = (focusPoint.y / 100) * video.videoHeight;
-        const innerRadius = Math.min(video.videoWidth, video.videoHeight) * (focusAreaSize / 100);
-        const outerRadius = Math.min(video.videoWidth, video.videoHeight) * ((focusAreaSize + 30) / 100);
-        
-        ctx.save();
-        // Create a radial gradient for the mask
+        // Build the mask
         const maskCanvas = document.createElement('canvas');
         maskCanvas.width = video.videoWidth;
         maskCanvas.height = video.videoHeight;
         const mctx = maskCanvas.getContext('2d');
+        
         if (mctx) {
-          const gradient = mctx.createRadialGradient(fX, fY, innerRadius, fX, fY, outerRadius);
-          gradient.addColorStop(0, 'white');
-          gradient.addColorStop(1, 'transparent');
-          mctx.fillStyle = gradient;
-          mctx.fillRect(0, 0, video.videoWidth, video.videoHeight);
-          
-          // Draw sharp image on a temporary canvas, apply mask, then draw that on main ctx
-          const sharpCanvas = document.createElement('canvas');
-          sharpCanvas.width = video.videoWidth;
-          sharpCanvas.height = video.videoHeight;
-          const sctx = sharpCanvas.getContext('2d');
-          if (sctx) {
-            sctx.filter = sharpFilters;
-            sctx.drawImage(video, 0, 0);
-            sctx.globalCompositeOperation = 'destination-in';
-            sctx.drawImage(maskCanvas, 0, 0);
+          if (aiHumanDetection && subjectBox) {
+            // Sophisticated Human Detection Mask
+            const bx = subjectBox.xmin * video.videoWidth / 1000;
+            const by = subjectBox.ymin * video.videoHeight / 1000;
+            const bw = (subjectBox.xmax - subjectBox.xmin) * video.videoWidth / 1000;
+            const bh = (subjectBox.ymax - subjectBox.ymin) * video.videoHeight / 1000;
             
-            ctx.restore(); 
-            ctx.filter = 'none'; 
-            ctx.globalCompositeOperation = 'source-over'; // Ensure we draw sharp over blurred
-            ctx.drawImage(sharpCanvas, 0, 0);
+            // Draw a smooth rounded box for the human
+            mctx.fillStyle = 'white';
+            const radius = Math.min(bw, bh) * 0.3;
+            mctx.beginPath();
+            mctx.roundRect(bx - radius/2, by - radius/2, bw + radius, bh + radius, radius);
+            mctx.fill();
+            // Blurring the mask for soft edges
+            mctx.filter = 'blur(20px)';
+            mctx.drawImage(maskCanvas, 0, 0);
+          } else {
+            // Manual Point Mask
+            const effectiveX = facingMode === 'user' ? (100 - focusPoint.x) : focusPoint.x;
+            const fX = (effectiveX / 100) * video.videoWidth;
+            const fY = (focusPoint.y / 100) * video.videoHeight;
+            const innerRadius = Math.min(video.videoWidth, video.videoHeight) * (focusAreaSize / 100);
+            const outerRadius = Math.min(video.videoWidth, video.videoHeight) * ((focusAreaSize + 30) / 100);
+            
+            const gradient = mctx.createRadialGradient(fX, fY, innerRadius, fX, fY, outerRadius);
+            gradient.addColorStop(0, 'white');
+            gradient.addColorStop(1, 'transparent');
+            mctx.fillStyle = gradient;
+            mctx.fillRect(0, 0, video.videoWidth, video.videoHeight);
+          }
+
+          if (isBlurSubject) {
+            // Background is Sharp, Touched Point is Blur
+            ctx.filter = sharpFilters;
+            ctx.drawImage(video, 0, 0);
+            
+            const blurCanvas = document.createElement('canvas');
+            blurCanvas.width = video.videoWidth;
+            blurCanvas.height = video.videoHeight;
+            const bctx = blurCanvas.getContext('2d');
+            if (bctx) {
+              bctx.filter = blurredFilters;
+              bctx.drawImage(video, 0, 0);
+              bctx.globalCompositeOperation = 'destination-in';
+              bctx.drawImage(maskCanvas, 0, 0);
+              
+              ctx.save();
+              ctx.filter = 'none';
+              ctx.globalCompositeOperation = 'source-over';
+              ctx.drawImage(blurCanvas, 0, 0);
+              ctx.restore();
+            }
+          } else {
+            // Background is Blur, Touched Point is Sharp (Default Bokeh)
+            ctx.filter = blurredFilters;
+            ctx.drawImage(video, 0, 0);
+            
+            const sharpCanvas = document.createElement('canvas');
+            sharpCanvas.width = video.videoWidth;
+            sharpCanvas.height = video.videoHeight;
+            const sctx = sharpCanvas.getContext('2d');
+            if (sctx) {
+              sctx.filter = sharpFilters;
+              sctx.drawImage(video, 0, 0);
+              sctx.globalCompositeOperation = 'destination-in';
+              sctx.drawImage(maskCanvas, 0, 0);
+              
+              ctx.save();
+              ctx.filter = 'none';
+              ctx.globalCompositeOperation = 'source-over';
+              ctx.drawImage(sharpCanvas, 0, 0);
+              ctx.restore();
+            }
           }
         }
       } else {
@@ -511,7 +564,7 @@ export default function App() {
     }
     
     setTimeout(() => setIsCapturing(false), 300);
-  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualTime, manualTimeValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode]);
+  }, [timemarkEnabled, timemarkManualText, locationText, useManualDate, manualDateValue, useManualTime, manualTimeValue, useManualLocation, manualLocationText, timemarkFontSize, exposure, wb, iso, focus, focusAreaSize, focusPoint, activeFilter, facingMode, focusMode, aiHumanDetection, subjectBox]);
   const analyzeScene = async () => {
     if (!videoRef.current || !canvasRef.current || aiAnalyzing) return;
     setAiAnalyzing(true);
@@ -532,22 +585,17 @@ export default function App() {
         contents: [
           {
             parts: [
-              { text: `Analyze this camera view. Identify main objects and provide professional photography tips.
-                       Presets available: standard, vivid, fresh, cinematic, vintage, noir, lomo, dreamy.
-                       
-                       CRITICAL:
-                       1. Recommend the best filter ID from the list above based on colors and lighting.
-                       2. If a person is the subject and their pose is sub-optimal:
-                          - Set "pose_score" (1-10) where < 7 means a better pose is needed.
-                          - Set "recommended_pose_id" to 0 (Standing), 1 (S-Curve), or 2 (Fashion Lean).
+              { text: `Analyze this camera view. 
+                       1. Identify main objects.
+                       2. Recommend the best filter ID from available: standard, vibrant, iphone_vibrant, iphone_warm, iphone_cool, cinematic, noir.
+                       3. If humans are present, provide ONE main bounding box [ymin, xmin, ymax, xmax] in 0-1000 normalized coordinates for the primary person.
+                       4. Based on light and subject, suggest 2 professional photography tips.
                        
                        Return JSON strictly: { 
                          "objects": [], 
                          "tips": [], 
-                         "pose": "string description",
-                         "pose_score": number,
-                         "recommended_pose_id": number | null,
-                         "recommended_filter_id": "string"
+                         "recommended_filter_id": "string",
+                         "subject_box": [ymin, xmin, ymax, xmax] | null
                        }` },
               { inlineData: { mimeType: "image/jpeg", data: base64Image } }
             ]
@@ -559,11 +607,23 @@ export default function App() {
       const data = JSON.parse(response.text || '{}');
       setAiFeedback(data);
       
-      // Automatically show recommended dots if pose score is low and feature is enabled
-      if (showPoseDots && data.pose_score < 8 && data.recommended_pose_id !== null) {
-        setRecommendedPoseIdx(data.recommended_pose_id);
-      } else {
-        setRecommendedPoseIdx(null);
+      if (data.recommended_filter_id) {
+        const found = FILTER_PRESETS.find(f => f.id === data.recommended_filter_id);
+        if (found) setActiveFilter(found);
+      }
+
+      if (data.subject_box) {
+        setSubjectBox({
+          ymin: data.subject_box[0],
+          xmin: data.subject_box[1],
+          ymax: data.subject_box[2],
+          xmax: data.subject_box[3]
+        });
+        
+        // Auto-align focus point and bokeh center to detected subject
+        const centerX = (data.subject_box[1] + data.subject_box[3]) / 20; // Convert 0-1000 to 0-100
+        const centerY = (data.subject_box[0] + data.subject_box[2]) / 20;
+        setFocusPoint({ x: centerX, y: centerY });
       }
     } catch (err) {
       console.error("AI Analysis failed", err);
@@ -664,6 +724,13 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <button 
+              onClick={() => window.location.reload()}
+              className="p-1.5 hover:text-white transition-colors" 
+              title="Refresh Camera"
+            >
+              <RotateCw size={16} className="md:w-[18px] md:h-[18px]" />
+            </button>
+            <button 
               onClick={() => {
                 setHasStarted(false);
                 if (stream) stream.getTracks().forEach(t => t.stop());
@@ -708,7 +775,28 @@ export default function App() {
               <button onClick={() => setShowSettings(false)} className="text-white/30 hover:text-white"><X size={14} /></button>
             </div>
             
+            {/* Settings Sections */}
             <div className="space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                <span className="text-[10px] uppercase font-bold tracking-tighter">AI Human Bokeh</span>
+                <button 
+                  onClick={() => setAiHumanDetection(!aiHumanDetection)}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${aiHumanDetection ? 'bg-accent' : 'bg-white/10'}`}
+                >
+                  <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform ${aiHumanDetection ? 'translate-x-5' : ''}`} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                <span className="text-[10px] uppercase font-bold tracking-tighter">Touch Mode</span>
+                <button 
+                  onClick={() => setFocusMode(focusMode === 'FOCUS_SUBJECT' ? 'BLUR_SUBJECT' : 'FOCUS_SUBJECT')}
+                  className="bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-[8px] text-white hover:border-accent transition-colors uppercase font-bold"
+                >
+                  {focusMode === 'FOCUS_SUBJECT' ? 'Focus Subject' : 'Blur Subject'}
+                </button>
+              </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase font-bold tracking-tighter">Enable Timemark</span>
                 <button 
@@ -841,6 +929,27 @@ export default function App() {
           onClick={handleViewfinderTap}
           className="relative w-full h-full rounded-sm overflow-hidden border-[1px] md:border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900 cursor-crosshair"
         >
+          {/* Smart AI Detection Ring (Invisible if not detected) */}
+          {aiHumanDetection && subjectBox && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ 
+                opacity: 1,
+                left: `${subjectBox.xmin/10}%`,
+                top: `${subjectBox.ymin/10}%`,
+                width: `${(subjectBox.xmax - subjectBox.xmin)/10}%`,
+                height: `${(subjectBox.ymax - subjectBox.ymin)/10}%`
+              }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="absolute pointer-events-none border-2 border-accent/50 rounded-xl"
+            >
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-accent text-white text-[8px] px-2 py-0.5 rounded-full font-bold uppercase whitespace-nowrap flex items-center gap-1.5 shadow-lg shadow-accent/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                AI Subject Tracking • Locked
+              </div>
+            </motion.div>
+          )}
+
           {/* Tap-to-Focus Ring */}
           <AnimatePresence>
             {showFocusRing && (
@@ -1303,43 +1412,70 @@ export default function App() {
       <AnimatePresence>
         {capturedImage && (
           <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black flex flex-col p-6 overflow-hidden"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-[100] bg-black/98 flex flex-col items-center justify-center p-4 md:p-12 overflow-hidden"
           >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-white text-sm font-bold tracking-widest">MASTER_SHOT_X_2026.JPG</h3>
-              <button 
-                onClick={() => setCapturedImage(null)}
-                className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors text-white"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#151619] flex items-center justify-center">
-              <img src={capturedImage} className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
-              
-              <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
-                <div className="space-y-1">
-                  <span className="text-[9px] text-white/40 block">EXIF DATA</span>
-                  <div className="px-3 py-1.5 bg-black/50 backdrop-blur rounded-lg border border-white/10 text-[10px] text-white/80 space-x-4">
-                    <span>ISO {iso * 100}</span>
-                    <span>1/125s</span>
-                    <span>f/1.8</span>
-                    <span>{wb > 0 ? '5500K' : '3200K'}</span>
-                  </div>
-                </div>
-                
-                <a 
+            <div className="relative w-full max-w-5xl h-full flex flex-col gap-6">
+               {/* Header Info */}
+               <div className="flex items-center justify-between text-white border-b border-white/5 pb-4 px-2">
+                 <div className="flex flex-col">
+                   <div className="flex items-center gap-3">
+                     <div className="w-2.5 h-2.5 rounded-full bg-accent relative shrink-0">
+                       <div className="absolute inset-0 rounded-full bg-accent animate-ping opacity-50" />
+                     </div>
+                     <span className="text-accent font-serif italic text-2xl md:text-3xl tracking-tight">Lumix Pro Master</span>
+                   </div>
+                   <span className="text-[10px] uppercase tracking-[0.3em] opacity-40 ml-6 font-mono hidden md:block">Neural Engine Processing • HDR Active • 2026 Studio System</span>
+                   <span className="text-[8px] uppercase tracking-[0.2em] opacity-40 ml-6 font-mono md:hidden mt-1">Neural Engine Active</span>
+                 </div>
+                 <button onClick={() => setCapturedImage(null)} className="p-3 hover:bg-white/10 rounded-full transition-all active:scale-90 group border border-white/5">
+                   <X size={32} className="group-hover:rotate-90 transition-transform duration-300" />
+                 </button>
+               </div>
+               
+               {/* High-End Image Preview Section */}
+               <div className="flex-1 relative rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(255,77,0,0.15)] border border-white/10 group bg-[#080808] flex items-center justify-center">
+                 <img src={capturedImage} className="max-w-full max-h-full object-contain" alt="Captured" referrerPolicy="no-referrer" />
+                 
+                 {/* Floating Labels */}
+                 <div className="absolute top-6 left-6 hidden md:flex flex-col gap-2">
+                   <div className="px-4 py-2 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-xl text-[10px] uppercase font-bold tracking-widest text-accent flex items-center gap-2">
+                     <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                     {mode} Mode
+                   </div>
+                   <div className="px-4 py-2 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-xl text-[10px] uppercase font-bold tracking-widest text-white/80">
+                     {activeFilter.name} Optimization
+                   </div>
+                 </div>
+
+                 {/* EXIF Watermark Style */}
+                 <div className="absolute bottom-6 left-6 hidden md:flex flex-col opacity-50">
+                    <span className="font-mono text-[10px] tracking-widest text-white">LMXP-2026-STUDIO-OPT</span>
+                    <span className="font-mono text-[8px] tracking-[0.5em] text-white/60">0419_1742_SYS</span>
+                 </div>
+               </div>
+               
+               {/* Enhanced Action Controls */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
+                 <button 
+                  onClick={() => setCapturedImage(null)}
+                  className="py-5 rounded-2xl bg-white/5 border border-white/10 text-white font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-4 backdrop-blur-xl group active:scale-[0.98]"
+                 >
+                   <RotateCcw size={20} className="group-hover:-rotate-45 transition-transform" />
+                   <span className="text-sm">Retake Image</span>
+                 </button>
+                 <a 
                   href={capturedImage} 
-                  download="lumix-pro-shot.jpg"
-                  className="p-4 bg-white text-black rounded-full hover:scale-110 transition-transform shadow-xl"
-                >
-                  <Download size={24} />
-                </a>
-              </div>
+                  download="LUMIX_PRO_MASTER.jpg"
+                  className="py-5 rounded-2xl bg-accent text-white font-bold uppercase tracking-widest hover:bg-accent/80 transition-all shadow-2xl shadow-accent/20 flex items-center justify-center gap-4 active:scale-[0.98] relative group overflow-hidden"
+                 >
+                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                   <Download size={20} className="group-hover:translate-y-0.5 transition-transform" />
+                   <span className="text-sm">Save to Gallery</span>
+                 </a>
+               </div>
             </div>
           </motion.div>
         )}
