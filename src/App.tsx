@@ -36,7 +36,8 @@ import {
   Hand,
   Timer,
   Wand2,
-  SquareUser
+  SquareUser,
+  SlidersHorizontal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -334,6 +335,7 @@ export default function App() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewRotation, setPreviewRotation] = useState(0);
   const [poseIndex, setPoseIndex] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -466,7 +468,8 @@ export default function App() {
   const [wb, setWb] = useState(0); // -100 to 100
   const [focus, setFocus] = useState(0); // 0 to 100
   const [focusAreaSize, setFocusAreaSize] = useState(25); // 10 to 70
-  const [iso, setIso] = useState(1); // 1 to 5
+  const [iso, setIso] = useState(1); // 1 to 16 (ISO 100 to 1600)
+  const [showIsoSlider, setShowIsoSlider] = useState(false);
   const [resolution, setResolution] = useState<'HD' | 'UHD'>('UHD');
   const [uiVisible, setUiVisible] = useState(true);
   
@@ -643,7 +646,7 @@ export default function App() {
 
       // Selective Blur Logic
       const blurVal = focus > 0 ? focus / 4 : 0; 
-      let baseFilters = `brightness(${1 + exposure / 100}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + iso / 10}) ${activeFilter.css}`;
+      let baseFilters = `brightness(${1 + exposure / 100 + (iso - 1) / 20}) contrast(${1 + Math.abs(exposure) / 200}) hue-rotate(${wb * 0.5}deg) saturate(${1 + (iso - 1) / 50}) ${activeFilter.css}`;
       
       // Professional Scan Processing (Whiten background, darken text, remove mid-tone stains)
       if (mode === 'SCAN') {
@@ -793,21 +796,17 @@ export default function App() {
 
   const handleDownload = async () => {
     if (!capturedImage) return;
-    if (hdEnhance === 'OFF') {
-      const link = document.createElement('a');
-      link.href = capturedImage;
-      link.download = "LUMIX_PRO_MASTER.jpg";
-      link.click();
-      return;
-    }
 
     const img = new Image();
     img.src = capturedImage;
     await new Promise(resolve => img.onload = resolve);
 
     const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
+    const isRotated90or270 = previewRotation === 90 || previewRotation === 270;
+    
+    canvas.width = isRotated90or270 ? img.height : img.width;
+    canvas.height = isRotated90or270 ? img.width : img.height;
+    
     const ctx = canvas.getContext('2d');
     if (ctx) {
       if (hdEnhance === 'HD') {
@@ -815,10 +814,15 @@ export default function App() {
       } else if (hdEnhance === 'SMOOTH') {
         ctx.filter = 'saturate(1.08) brightness(1.08) contrast(0.92)';
       }
-      ctx.drawImage(img, 0, 0);
+      
+      // Apply rotation
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((previewRotation * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      
       const link = document.createElement('a');
       link.href = canvas.toDataURL('image/jpeg', 0.98);
-      link.download = `LUMIX_PRO_${hdEnhance}_ENHANCED.jpg`;
+      link.download = `LUMIX_PRO_MASTER_${Date.now()}.jpg`;
       link.click();
     }
   };
@@ -915,10 +919,10 @@ export default function App() {
   const smartPass = "brightness(1.02) contrast(1.05) saturate(1.02)";
   const cameraFilters = `
     ${smartPass}
-    brightness(${1 + exposure / 100})
+    brightness(${1 + exposure / 100 + (iso - 1) / 20})
     contrast(${1 + Math.abs(exposure) / 200})
     hue-rotate(${wb * 0.5}deg)
-    saturate(${1 + iso / 10})
+    saturate(${1 + (iso - 1) / 50})
     ${mode === 'SCAN' ? 'contrast(1.5) brightness(1.1) saturate(1.15)' : activeFilter.css}
   `;
 
@@ -1398,10 +1402,52 @@ export default function App() {
                   <span className="text-[7px] text-text-dim uppercase font-bold tracking-tighter">Flash</span>
                   {torchOn ? <Zap size={14} className="text-accent" /> : <ZapOff size={14} className="text-white/20" />}
                 </button>
-                <ControlCard label="ISO" value={(iso * 100).toString()} />
+                <button 
+                  onClick={() => setShowIsoSlider(!showIsoSlider)}
+                  className="cursor-pointer active:scale-95 transition-transform"
+                  title="Adjust ISO Sensitivity"
+                >
+                  <ControlCard label="ISO" value={(iso * 100).toString()} active={showIsoSlider} />
+                </button>
                 <ControlCard label="EV" value={exposure > 0 ? `+${exposure/100}` : (exposure/100).toString()} active={exposure !== 0} />
                 <ControlCard label="WB" value={wb >= 0 ? `${5200 + wb*10}K` : `${3200 + wb*10}K`} active={wb !== 0} />
                 <ControlCard label="FCS" value={focus === 0 ? "AF" : (focus/10).toFixed(1)} active={focus !== 0} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showIsoSlider && uiVisible && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute right-[85px] top-1/2 -translate-y-1/2 h-[300px] bg-panel/80 backdrop-blur-xl border border-ui-border rounded-3xl p-4 flex flex-col items-center gap-4 z-50 shadow-2xl"
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <SlidersHorizontal size={14} className="text-accent" />
+                  <span className="text-[10px] font-bold text-white leading-none">ISO {iso * 100}</span>
+                </div>
+                
+                <div className="relative flex-1 w-10 flex items-center justify-center">
+                  <input 
+                    type="range"
+                    min={1}
+                    max={16}
+                    step={1}
+                    value={iso}
+                    onChange={(e) => setIso(Number(e.target.value))}
+                    className="absolute w-[220px] -rotate-90 bg-[#333] appearance-none h-1.5 rounded-full accent-accent cursor-pointer"
+                    style={{ transformOrigin: 'center' }}
+                  />
+                </div>
+                
+                <button 
+                  onClick={() => setShowIsoSlider(false)}
+                  className="p-1.5 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition-colors"
+                >
+                  <X size={12} className="text-white" />
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1913,7 +1959,10 @@ export default function App() {
                       dragConstraints={{ left: -1000, right: 1000, top: -1000, bottom: 1000 }}
                       src={capturedImage} 
                       className="max-w-full max-h-full object-contain" 
-                      animate={{ scale: previewZoom }}
+                      animate={{ 
+                        scale: previewZoom,
+                        rotate: previewRotation
+                      }}
                       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                       style={{ 
                         filter: hdEnhance === 'HD' 
@@ -1946,7 +1995,7 @@ export default function App() {
                {/* Enhanced Action Controls */}
                <div className="flex flex-col md:flex-row gap-3 pb-4">
                  <button 
-                  onClick={() => { setCapturedImage(null); setHdEnhance('OFF'); setPreviewZoom(1); }}
+                  onClick={() => { setCapturedImage(null); setHdEnhance('OFF'); setPreviewZoom(1); setPreviewRotation(0); }}
                   className="flex-1 py-4 md:py-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold uppercase tracking-[0.2em] hover:bg-white/10 transition-all flex items-center justify-center gap-3 backdrop-blur-xl group active:scale-[0.98]"
                  >
                    <RotateCcw size={18} className="group-hover:-rotate-45 transition-transform" />
@@ -1959,6 +2008,14 @@ export default function App() {
                  >
                    <Wand2 size={18} className={hdEnhance !== 'OFF' ? 'animate-pulse' : ''} />
                    <span className="text-[10px] md:text-xs">{hdEnhance === 'OFF' ? 'HD Filter' : hdEnhance === 'HD' ? 'Ultra HD' : 'Smooth Clear'}</span>
+                 </button>
+
+                 <button 
+                  onClick={() => setPreviewRotation(prev => (prev + 90) % 360)}
+                  className="flex-1 py-4 md:py-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold uppercase tracking-[0.2em] hover:bg-white/10 transition-all flex items-center justify-center gap-3 backdrop-blur-xl group active:scale-[0.98]"
+                 >
+                   <RotateCw size={18} className="group-hover:rotate-90 transition-transform" />
+                   <span className="text-[10px] md:text-xs">Rotate</span>
                  </button>
 
                  <div className="flex-[1.5] flex flex-col gap-2">
