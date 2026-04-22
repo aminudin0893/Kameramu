@@ -233,42 +233,44 @@ function DotSilhouette({ poseIndex }: { poseIndex: number }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 0.8 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 pointer-events-none z-30"
+      className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center p-12"
     >
-      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_10px_rgba(255,77,0,0.5)]">
-        {/* Faint Humanoid Body Background */}
-        <path 
-           d="M50,10 Q50,5 50,10 Q42,10 42,18 Q42,25 50,25 Q58,25 58,18 Q58,10 50,10 M40,30 L60,30 L65,60 L58,95 L42,95 L35,60 Z" 
-           fill="#FF4D00" 
-           opacity="0.05"
-        />
+      <div className="relative w-full h-full max-w-[80vw] max-h-[70vh]">
+        <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_25px_rgba(255,77,0,0.4)]">
+          {/* Detailed Human Silhouette instead of just dots */}
+          <motion.path 
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 1.2, ease: "easeOut" }}
+            d="M50,15 C54,15 57,18 57,22 C57,26 54,29 50,29 C46,29 43,26 43,22 C43,18 46,15 50,15 M40,32 L60,32 C65,32 68,35 68,40 L65,65 C64,70 62,72 60,72 L55,72 L58,95 C58,98 56,100 53,100 L47,100 C44,100 42,98 42,95 L45,72 L40,72 C38,72 36,70 35,65 L32,40 C32,35 35,32 40,32 Z"
+            fill="none"
+            stroke="#FF4D00"
+            strokeWidth="0.8"
+            className="opacity-90"
+          />
+          
+          {/* Enhanced points over the silhouette */}
+          {pose.points.map((p, i) => (
+            <motion.g key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: i * 0.05 }}>
+              <circle cx={p.x} cy={p.y} r="2.5" fill="#FF4D00" className="opacity-40 animate-pulse" />
+              <circle cx={p.x} cy={p.y} r="1" fill="white" />
+            </motion.g>
+          ))}
+          
+          {/* Skeletal hint lines */}
+          <polyline
+            points={pose.points.map(p => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke="#FF4D00"
+            strokeWidth="0.4"
+            opacity="0.3"
+          />
+        </svg>
         
-        {pose.points.map((p, i) => (
-          <g key={i}>
-            <motion.circle
-              cx={p.x}
-              cy={p.y}
-              r="1.4"
-              fill="#FF4D00"
-              initial={{ scale: 0 }}
-              animate={{ scale: [0, 1.2, 1] }}
-              transition={{ delay: i * 0.03 }}
-            />
-            <circle cx={p.x} cy={p.y} r="1.4" fill="none" stroke="white" strokeWidth="0.2" opacity="0.5" />
-          </g>
-        ))}
-        {/* Connecting Lines for "Skeleton" look */}
-        <polyline
-          points={pose.points.map(p => `${p.x},${p.y}`).join(' ')}
-          fill="none"
-          stroke="#FF4D00"
-          strokeWidth="0.3"
-          opacity="0.6"
-        />
-      </svg>
-      <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 bg-accent/30 backdrop-blur-xl px-4 py-1.5 rounded-full border border-accent/50 flex flex-col items-center">
-        <span className="text-[10px] text-white font-black uppercase tracking-[0.2em]">{pose.name}</span>
-        <span className="text-[7px] text-accent-foreground/70 uppercase font-bold tracking-tighter">Follow the Dots</span>
+        <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 bg-accent/30 backdrop-blur-xl px-4 py-1.5 rounded-full border border-accent/50 flex flex-col items-center">
+          <span className="text-[10px] text-white font-black uppercase tracking-[0.2em] whitespace-nowrap">{pose.name}</span>
+          <span className="text-[7px] text-accent-foreground/70 uppercase font-bold tracking-tighter">Follow the Pose</span>
+        </div>
       </div>
     </motion.div>
   );
@@ -601,15 +603,42 @@ export default function App() {
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Professional Landscape to Portrait correction
+    // If user takes a LANDSCAPE shot, we rotate the pixels so the file is saved as Portrait (upright)
+    const isLandscapeMode = mode === 'LANDSCAPE';
+    const isSideways = video.videoWidth > video.videoHeight;
+    
+    let canvasWidth = video.videoWidth;
+    let canvasHeight = video.videoHeight;
+    let rotationNeeded = false;
+
+    if (isLandscapeMode && isSideways) {
+      canvasWidth = video.videoHeight;
+      canvasHeight = video.videoWidth;
+      rotationNeeded = true;
+    }
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
+      if (rotationNeeded) {
+        ctx.translate(canvasWidth / 2, canvasHeight / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.translate(-canvasHeight / 2, -canvasWidth / 2);
+      }
+
       // Handle Mirroring for Front Camera Capture
       if (facingMode === 'user') {
-        ctx.translate(video.videoWidth, 0);
-        ctx.scale(-1, 1);
+        if (rotationNeeded) {
+          // Adjust mirroring for rotated coordinates
+          ctx.translate(0, video.videoHeight);
+          ctx.scale(1, -1);
+        } else {
+          ctx.translate(video.videoWidth, 0);
+          ctx.scale(-1, 1);
+        }
       }
 
       // Selective Blur Logic
