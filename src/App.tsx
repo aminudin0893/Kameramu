@@ -460,38 +460,48 @@ export default function App() {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
           const data = await res.json();
           
-          if (data.address) {
+          if (data && data.address) {
             const { 
               house_number, road, 
-              suburb, village, hamlet, neighbourhood,
-              city_district, 
-              city, town, village: v2, municipality, county,
-              state, postcode, country 
+              neighbourhood, suburb, village, hamlet, 
+              city_district, city, town, municipality, 
+              county, state, postcode 
             } = data.address;
 
-            // Format Jalan & Nomor
-            const roadName = road || "";
+            // 1. Format Jalan & Nomor (Standard Indonesian Style)
+            let roadName = road || neighbourhood || "";
+            if (roadName.toLowerCase().startsWith('jalan ')) {
+              roadName = "Jl. " + roadName.substring(6);
+            } else if (roadName && !roadName.toLowerCase().startsWith('jl.') && !roadName.toLowerCase().startsWith('jalan')) {
+              roadName = "Jl. " + roadName;
+            }
             const streetLine = house_number ? `${roadName} No.${house_number}` : roadName;
             
-            // Kelurahan / Desa
-            const kelurahan = suburb || village || v2 || hamlet || neighbourhood || "";
+            // 2. Kelurahan / Desa
+            // Usually 'village' or 'suburb' in ID. neighbourhood might be the most specific.
+            const kelurahan = village || (neighbourhood !== road ? neighbourhood : "") || suburb || "";
             
-            // Kecamatan
+            // 3. Kecamatan (City District)
             let kecamatan = city_district || "";
             if (kecamatan && !kecamatan.toLowerCase().includes('kecamatan') && !kecamatan.toLowerCase().startsWith('kec.')) {
               kecamatan = `Kec. ${kecamatan}`;
             }
             
-            // Kota / Kabupaten
-            const kota = city || town || municipality || county || "";
+            // 4. Kota / Kabupaten
+            let kota = city || town || municipality || county || "";
+            if (kota) {
+              if (!kota.toLowerCase().startsWith('kota') && !kota.toLowerCase().startsWith('kab.')) {
+                if (city || town) kota = `Kota ${kota}`;
+                else if (county) kota = `Kab. ${kota}`;
+              }
+            }
             
             const mainParts = [streetLine, kelurahan, kecamatan, kota].filter(Boolean);
             const secondaryParts = [state, postcode].filter(Boolean);
             
             const formatted = mainParts.join(", ") + (secondaryParts.length ? ", " + secondaryParts.join(" ") : "");
             
-            // Jika hasil parsing kosong, gunakan display_name asli
-            setLocationText(formatted || data.display_name);
+            setLocationText(formatted && formatted.length > 10 ? formatted : data.display_name);
           } else {
             setLocationText(data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
           }
@@ -500,14 +510,18 @@ export default function App() {
         }
       },
       () => setLocationText("GPS Access Denied"),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   }, []);
 
   useEffect(() => {
+    let interval: any;
     if (timemarkEnabled) {
       fetchLocation();
+      // Periodically refresh if enabled to ensure accuracy as user moves
+      interval = setInterval(fetchLocation, 60000); 
     }
+    return () => clearInterval(interval);
   }, [timemarkEnabled, fetchLocation]);
   
   const poses = [
@@ -1376,30 +1390,33 @@ export default function App() {
           onClick={handleViewfinderTap}
           className="relative w-full h-full rounded-sm overflow-hidden border-[1px] md:border-[12px] border-[#1a1a1a] shadow-inner flex items-center justify-center bg-neutral-900 cursor-crosshair"
         >
-          {/* Smart AI Detection Ring (Invisible if not detected) */}
-          {(aiHumanDetection || activeFilter.id.startsWith('ip_')) && (
-            <div className="absolute top-4 right-4 z-[45] flex flex-col items-end gap-1 pointer-events-none">
-              <motion.div 
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="px-3 py-1 bg-accent/90 backdrop-blur-xl rounded-full border border-white/20 flex items-center gap-2 shadow-xl"
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
-                  {activeFilter.id.startsWith('ip_') ? 'iPhone Pro Portrait' : 'AI Subject Tracking'}
-                </span>
-              </motion.div>
-              {activeFilter.id.startsWith('ip_') && focus > 0 && (
-                <motion.span 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.6 }}
-                  className="text-[7px] text-white uppercase font-mono tracking-widest mr-2"
+          {/* Top-Right Control Actions */}
+          <div className="absolute top-4 right-4 z-[45] flex flex-col gap-2">
+            <AnimatePresence>
+              {(aiHumanDetection || activeFilter.id.startsWith('ip_')) && (
+                <motion.div 
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 20, x: 20 }}
+                  className="px-3 py-1 bg-accent/90 backdrop-blur-xl rounded-full border border-white/20 flex items-center gap-2 shadow-xl"
                 >
-                  Depth: f/{(22 - focus/5).toFixed(1)}
-                </motion.span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
+                    {activeFilter.id.startsWith('ip_') ? 'iPhone Pro Portrait' : 'AI Subject Tracking'}
+                  </span>
+                </motion.div>
               )}
-            </div>
-          )}
+            </AnimatePresence>
+            
+            <button 
+              onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
+              className="p-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-full text-white hover:bg-accent/40 transition-all active:scale-90 group flex items-center gap-2"
+              title="Refresh GPS Address"
+            >
+              <MapPin size={18} className={timemarkEnabled ? "text-accent" : "text-white/40"} />
+              <span className="text-[9px] font-black uppercase tracking-widest hidden group-hover:block pr-2">Refresh GPS</span>
+            </button>
+          </div>
 
           {aiHumanDetection && subjectBox && (
             <motion.div 
