@@ -457,17 +457,40 @@ export default function App() {
       async (pos) => {
         const { latitude, longitude } = pos.coords;
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
           const data = await res.json();
           
           if (data.address) {
-            const { road, suburb, city, town, village, county, state, postcode, country } = data.address;
-            const cityOrTown = city || town || village || county || "";
-            const area = suburb || "";
-            const mainParts = [road, area, cityOrTown].filter(Boolean);
-            const secondaryParts = [state, postcode, country].filter(Boolean);
+            const { 
+              house_number, road, 
+              suburb, village, hamlet, neighbourhood,
+              city_district, 
+              city, town, village: v2, municipality, county,
+              state, postcode, country 
+            } = data.address;
+
+            // Format Jalan & Nomor
+            const roadName = road || "";
+            const streetLine = house_number ? `${roadName} No.${house_number}` : roadName;
             
-            const formatted = mainParts.join(", ") + (secondaryParts.length ? " • " + secondaryParts.join(", ") : "");
+            // Kelurahan / Desa
+            const kelurahan = suburb || village || v2 || hamlet || neighbourhood || "";
+            
+            // Kecamatan
+            let kecamatan = city_district || "";
+            if (kecamatan && !kecamatan.toLowerCase().includes('kecamatan') && !kecamatan.toLowerCase().startsWith('kec.')) {
+              kecamatan = `Kec. ${kecamatan}`;
+            }
+            
+            // Kota / Kabupaten
+            const kota = city || town || municipality || county || "";
+            
+            const mainParts = [streetLine, kelurahan, kecamatan, kota].filter(Boolean);
+            const secondaryParts = [state, postcode].filter(Boolean);
+            
+            const formatted = mainParts.join(", ") + (secondaryParts.length ? ", " + secondaryParts.join(" ") : "");
+            
+            // Jika hasil parsing kosong, gunakan display_name asli
             setLocationText(formatted || data.display_name);
           } else {
             setLocationText(data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
