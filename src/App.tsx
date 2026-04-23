@@ -72,7 +72,26 @@ const toggleFullscreen = () => {
   }
 };
 
-type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO' | 'PAS_PHOTO' | 'FREE_POSE' | 'SCAN';
+const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = words[0];
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    const width = ctx.measureText(currentLine + " " + word).width;
+    if (width < maxWidth) {
+      currentLine += " " + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  lines.push(currentLine);
+  return lines;
+};
+
+type Mode = 'PHOTO' | 'PORTRAIT' | 'LANDSCAPE' | 'PRO' | 'PAS_PHOTO' | 'SCAN';
 type FocusMode = 'FOCUS_SUBJECT' | 'BLUR_SUBJECT';
 type PasPhotoSize = '2x3' | '3x4' | '4x6';
 
@@ -433,22 +452,32 @@ export default function App() {
 
   // Geolocation Logic
   const fetchLocation = useCallback(() => {
-    if (!navigator.geolocation) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
         try {
-          // Add User-Agent as required by Nominatim usage policy if possible, but browser fetch is fine for simple demo
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
           const data = await res.json();
-          // Extract more readable address
-          const address = data.display_name || "";
-          setLocationText(address);
+          
+          if (data.address) {
+            const { road, suburb, city, town, village, county, state, postcode, country } = data.address;
+            const cityOrTown = city || town || village || county || "";
+            const area = suburb || "";
+            const mainParts = [road, area, cityOrTown].filter(Boolean);
+            const secondaryParts = [state, postcode, country].filter(Boolean);
+            
+            const formatted = mainParts.join(", ") + (secondaryParts.length ? " • " + secondaryParts.join(", ") : "");
+            setLocationText(formatted || data.display_name);
+          } else {
+            setLocationText(data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+          }
         } catch {
-          setLocationText(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          setLocationText(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
         }
       },
-      () => setLocationText("GPS Access Denied")
+      () => setLocationText("GPS Access Denied"),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
@@ -764,9 +793,14 @@ export default function App() {
         // Reset transformation matrix so text is not mirrored when facingMode is 'user'
         ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-        ctx.font = `bold ${timemarkFontSize}px "JetBrains Mono", monospace`;
+        // Scale factor for responsive timemark
+        const scale = video.videoWidth / 1200;
+        const sFontSize = Math.max(12, timemarkFontSize * scale);
+        const margin = 40 * scale;
+        const maxWidth = video.videoWidth - (margin * 2);
+
         ctx.fillStyle = 'white';
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 6 * scale;
         ctx.shadowColor = 'black';
         ctx.textAlign = 'left';
         
@@ -785,11 +819,21 @@ export default function App() {
         const timestamp = formattedDate + (timeString ? ` • ${timeString}` : "");
         
         let displayLocation = useManualLocation ? manualLocationText : locationText;
-        const address = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
+        const addressText = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
+
+        // Draw Address first (bottom-most)
+        ctx.font = `${Math.round(sFontSize * 0.75)}px "JetBrains Mono", monospace`;
+        const addressLines = wrapText(ctx, addressText, maxWidth);
         
-        ctx.fillText(timestamp, 40, video.videoHeight - (timemarkFontSize * 3.125));
-        ctx.font = `${Math.round(timemarkFontSize * 0.75)}px "JetBrains Mono", monospace`;
-        ctx.fillText(address, 40, video.videoHeight - (timemarkFontSize * 1.875));
+        let currentY = video.videoHeight - (sFontSize * 1.875);
+        addressLines.reverse().forEach((line, idx) => {
+          ctx.fillText(line, margin, currentY - (idx * sFontSize * 0.85));
+        });
+
+        // Draw Timestamp above address
+        ctx.font = `bold ${sFontSize}px "JetBrains Mono", monospace`;
+        const timestampY = currentY - (addressLines.length * sFontSize * 0.85) - (sFontSize * 0.5);
+        ctx.fillText(timestamp, margin, timestampY);
       }
 
       setCapturedImage(canvas.toDataURL('image/jpeg', 0.95)); // High Quality
@@ -1024,8 +1068,9 @@ export default function App() {
     // Scale factor
     const scale = img.width / 1200;
     const sFontSize = Math.max(12, timemarkFontSize * scale);
+    const margin = 40 * scale;
+    const maxWidth = canvas.width - (margin * 2);
     
-    ctx.font = `bold ${sFontSize}px "JetBrains Mono", monospace`;
     ctx.fillStyle = 'white';
     ctx.shadowBlur = 4 * scale;
     ctx.shadowColor = 'black';
@@ -1045,11 +1090,21 @@ export default function App() {
     
     const timestamp = formattedDate + (timeString ? ` • ${timeString}` : "");
     let displayLocation = useManualLocation ? manualLocationText : locationText;
-    const address = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
+    const addressText = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
     
-    ctx.fillText(timestamp, 40 * scale, canvas.height - (sFontSize * 3.125));
+    // Draw Address
     ctx.font = `${Math.round(sFontSize * 0.75)}px "JetBrains Mono", monospace`;
-    ctx.fillText(address, 40 * scale, canvas.height - (sFontSize * 1.875));
+    const addressLines = wrapText(ctx, addressText, maxWidth);
+    
+    let currentY = canvas.height - (sFontSize * 1.875);
+    addressLines.reverse().forEach((line, idx) => {
+      ctx.fillText(line, margin, currentY - (idx * sFontSize * 0.85));
+    });
+
+    // Draw Timestamp
+    ctx.font = `bold ${sFontSize}px "JetBrains Mono", monospace`;
+    const timestampY = currentY - (addressLines.length * sFontSize * 0.85) - (sFontSize * 0.5);
+    ctx.fillText(timestamp, margin, timestampY);
     
     setCapturedImage(canvas.toDataURL('image/jpeg', 0.95));
   };
@@ -1602,8 +1657,8 @@ export default function App() {
             {mode === 'SCAN' && (
               <DocScanGuide tilt={tilt} />
             )}
-            {(showPoseDots || mode === 'FREE_POSE') && (
-              <DotSilhouette poseIndex={mode === 'FREE_POSE' ? poseIndex : (recommendedPoseIdx ?? 0)} />
+            {showPoseDots && (
+              <DotSilhouette poseIndex={recommendedPoseIdx ?? 0} />
             )}
           </AnimatePresence>
 
@@ -1830,12 +1885,11 @@ export default function App() {
                     exit={{ opacity: 0, y: 10 }}
                     className="flex gap-4 md:gap-8 text-[9px] md:text-[11px] font-bold tracking-[0.1em] uppercase overflow-x-auto no-scrollbar justify-start md:justify-center px-8"
                   >
-                    {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'FREE_POSE', 'SCAN'] as Mode[]).map(m => (
+                    {(['PHOTO', 'PORTRAIT', 'LANDSCAPE', 'PRO', 'PAS_PHOTO', 'SCAN'] as Mode[]).map(m => (
                       <button 
                         key={m}
                         onClick={() => {
                           setMode(m);
-                          if (m === 'FREE_POSE') setShowPoseDots(true);
                         }}
                         className={`relative transition-all pt-1 pb-2 shrink-0 ${mode === m ? 'text-white' : 'text-text-dim hover:text-white'}`}
                       >
@@ -1850,7 +1904,7 @@ export default function App() {
               )}
             </AnimatePresence>
 
-            {/* Sub-selectors for Pas Photo and Free Pose */}
+            {/* Sub-selectors for Pas Photo */}
             <AnimatePresence>
               {uiVisible && (
                 <div className="h-4 flex items-center justify-center">
@@ -1870,33 +1924,6 @@ export default function App() {
                           {s}
                         </button>
                       ))}
-                    </motion.div>
-                  )}
-                  {mode === 'FREE_POSE' && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 5 }}
-                      className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[300px]"
-                    >
-                      <button 
-                        onClick={() => setPoseIndex((prev) => (prev - 1 + DOT_POSES.length) % DOT_POSES.length)}
-                        className="p-1 text-white/20 hover:text-white transition-colors"
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <div className="flex flex-col items-center min-w-[60px]">
-                        <span className="text-[7px] text-accent font-bold uppercase tracking-widest leading-none mb-0.5">Template</span>
-                        <span className="text-[9px] text-white font-mono whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
-                          {poseIndex + 1}/{DOT_POSES.length}
-                        </span>
-                      </div>
-                      <button 
-                        onClick={() => setPoseIndex((prev) => (prev + 1) % DOT_POSES.length)}
-                        className="p-1 text-white/20 hover:text-white transition-colors"
-                      >
-                        <ChevronRight size={14} />
-                      </button>
                     </motion.div>
                   )}
                 </div>
