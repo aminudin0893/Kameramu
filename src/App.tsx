@@ -37,7 +37,9 @@ import {
   Timer,
   Wand2,
   SquareUser,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Image as ImageIcon,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -340,6 +342,7 @@ export default function App() {
   const [torchOn, setTorchOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isUploadedImage, setIsUploadedImage] = useState(false);
   
   // Timemark State
   const [timemarkEnabled, setTimemarkEnabled] = useState(false);
@@ -484,6 +487,7 @@ export default function App() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize Camera
   const startCamera = useCallback(async () => {
@@ -983,6 +987,71 @@ export default function App() {
     } else {
       capturePhoto();
     }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string;
+      setCapturedImage(dataUrl);
+      setIsUploadedImage(true);
+      setPreviewZoom(1);
+      setPreviewRotation(0);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const applyManualTimemark = async () => {
+    if (!capturedImage) return;
+    
+    // Process image to apply timemark
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = capturedImage;
+    await new Promise(resolve => img.onload = resolve);
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.drawImage(img, 0, 0);
+    
+    // Scale factor
+    const scale = img.width / 1200;
+    const sFontSize = Math.max(12, timemarkFontSize * scale);
+    
+    ctx.font = `bold ${sFontSize}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = 'white';
+    ctx.shadowBlur = 4 * scale;
+    ctx.shadowColor = 'black';
+    ctx.textAlign = 'left';
+    
+    const daysIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const d = useManualDate ? new Date(`${manualDateValue}T00:00:00`) : new Date();
+    const formattedDate = `${daysIndo[d.getDay()]}, ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    
+    let timeString = "";
+    if (useManualTime) {
+      timeString = manualTimeValue;
+    } else if (!useManualDate) {
+      const now = new Date();
+      timeString = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    }
+    
+    const timestamp = formattedDate + (timeString ? ` • ${timeString}` : "");
+    let displayLocation = useManualLocation ? manualLocationText : locationText;
+    const address = timemarkManualText ? `${timemarkManualText} • ${displayLocation}` : displayLocation;
+    
+    ctx.fillText(timestamp, 40 * scale, canvas.height - (sFontSize * 3.125));
+    ctx.font = `${Math.round(sFontSize * 0.75)}px "JetBrains Mono", monospace`;
+    ctx.fillText(address, 40 * scale, canvas.height - (sFontSize * 1.875));
+    
+    setCapturedImage(canvas.toDataURL('image/jpeg', 0.95));
   };
 
   return (
@@ -1842,6 +1911,24 @@ export default function App() {
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-2 md:p-3 rounded-full border border-white/10 hover:border-accent transition-all bg-white/5 active:scale-90"
+                      title="Upload Photo for Timemark"
+                    >
+                      <ImageIcon size={18} className="text-white" />
+                    </motion.button>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={handleImageUpload} 
+                    />
+
+                    <motion.button 
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
                       onClick={() => {
                         setShowPoseDots(!showPoseDots);
                         if (!showPoseDots) analyzeScene(); 
@@ -1973,6 +2060,18 @@ export default function App() {
                       }}
                       alt="Captured" 
                       referrerPolicy="no-referrer" />
+
+                    {isUploadedImage && (
+                      <div className="absolute top-6 right-6 flex flex-col gap-2 z-[110]">
+                        <button 
+                          onClick={applyManualTimemark}
+                          className="px-6 py-3 bg-accent shadow-[0_0_20px_rgba(255,77,0,0.4)] border border-accent rounded-xl text-xs md:text-sm uppercase font-black tracking-[0.2em] text-white flex items-center gap-3 hover:bg-accent/90 transition-all active:scale-95 animate-in fade-in zoom-in duration-300"
+                        >
+                          <Clock size={18} />
+                          Give Timemark Manual
+                        </button>
+                      </div>
+                    )}
                  
                  {/* Floating Labels */}
                  <div className="absolute top-6 left-6 hidden md:flex flex-col gap-2">
@@ -1995,7 +2094,14 @@ export default function App() {
                {/* Enhanced Action Controls */}
                <div className="flex flex-col md:flex-row gap-3 pb-4">
                  <button 
-                  onClick={() => { setCapturedImage(null); setHdEnhance('OFF'); setPreviewZoom(1); setPreviewRotation(0); }}
+                  onClick={() => { 
+                    setCapturedImage(null); 
+                    setHdEnhance('OFF'); 
+                    setPreviewZoom(1); 
+                    setPreviewRotation(0); 
+                    setIsUploadedImage(false);
+                    setIsUploadedImage(false);
+                  }}
                   className="flex-1 py-4 md:py-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold uppercase tracking-[0.2em] hover:bg-white/10 transition-all flex items-center justify-center gap-3 backdrop-blur-xl group active:scale-[0.98]"
                  >
                    <RotateCcw size={18} className="group-hover:-rotate-45 transition-transform" />
