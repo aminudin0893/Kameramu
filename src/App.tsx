@@ -1407,15 +1407,32 @@ export default function App() {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+
+          {/* Top-Left Control Actions */}
+          <div className="absolute top-6 left-6 z-[45] flex flex-col gap-4">
+            {capturedImage && (
+              <div 
+                className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer" 
+                onClick={() => { setShowSettings(true); setSettingsTab('TIMEMARK'); }}
+              >
+                <img src={capturedImage} className="w-full h-full object-cover" />
+              </div>
+            )}
             
-            <button 
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
-              className="p-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-full text-white hover:bg-accent/40 transition-all active:scale-90 group flex items-center gap-2"
+              className="p-3 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-full text-white hover:border-accent/40 shadow-2xl group flex items-center gap-2 self-start"
               title="Refresh GPS Address"
             >
               <MapPin size={18} className={timemarkEnabled ? "text-accent" : "text-white/40"} />
-              <span className="text-[9px] font-black uppercase tracking-widest hidden group-hover:block pr-2">Refresh GPS</span>
-            </button>
+              <div className="flex flex-col items-start overflow-hidden">
+                <span className="text-[7px] font-black uppercase tracking-widest leading-none text-accent mb-0.5">GPS Sync</span>
+                <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Refresh Location</span>
+              </div>
+            </motion.button>
           </div>
 
           {aiHumanDetection && subjectBox && (
@@ -1743,12 +1760,7 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          {/* Captured Preview (Small thumbnail) */}
-          {capturedImage && (
-            <div className="absolute top-6 left-6 z-40 w-16 h-16 rounded-lg border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-110 transition-transform cursor-pointer" onClick={() => setShowSettings(false)}>
-               <img src={capturedImage} className="w-full h-full object-cover" />
-            </div>
-          )}
+          {/* Captured Preview (Small thumbnail) - MOVED TO TOP-LEFT GROUP */}
 
           {/* Countdown Indicator */}
           {countdown !== null && (
@@ -1860,55 +1872,91 @@ export default function App() {
       <div className="bg-[#111]/90 backdrop-blur-xl border-t border-ui-border z-30 overflow-hidden transition-all duration-500 relative">
         <div className="flex flex-col md:grid md:grid-cols-[1.2fr,2fr,0.8fr] items-center px-4 md:px-10 py-2 gap-3">
           
-          {/* Left: Blur Slider Area */}
-          <AnimatePresence>
-            {uiVisible && (
-              <motion.div 
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="w-full space-y-1.5 max-w-[300px] md:max-w-none"
-              >
-                <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
-                  <div className="flex items-center gap-1.5">
-                    <Sun size={11} className="text-accent" />
-                    <span>Background Blur</span>
-                  </div>
-                  <span className="text-white italic">{focus === 0 ? "OFF" : `f/${(22 - focus/5).toFixed(1)}`}</span>
-                </div>
-                <div className="relative group flex items-center h-6">
-                  <input 
-                    type="range" 
-                    min={0} 
-                    max={100} 
-                    value={focus} 
-                    onChange={(e) => setFocus(Number(e.target.value))}
-                    className="w-full h-1.5 bg-[#333] appearance-none rounded-full accent-accent cursor-pointer"
-                  />
-                </div>
-
-                {focus > 0 && (
-                  <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300 pb-2">
-                    <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
-                      <div className="flex items-center gap-2">
-                        <Maximize size={10} className="text-accent" />
-                        <span>Subject Focus Area</span>
-                      </div>
-                      <span className="text-white italic">{focusAreaSize}%</span>
+          {/* Left: Controls & Sliders */}
+          <div className="flex flex-col gap-3">
+            <AnimatePresence>
+              {uiVisible && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="w-full space-y-1.5 max-w-[300px] md:max-w-none"
+                >
+                  <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5">
+                      <Sun size={11} className="text-accent" />
+                      <span>Background Blur</span>
                     </div>
+                    <span className="text-white italic">{focus === 0 ? "OFF" : `f/${(22 - focus/5).toFixed(1)}`}</span>
+                  </div>
+                  <div className="relative group flex items-center h-6">
                     <input 
                       type="range" 
-                      min={10} 
-                      max={70} 
-                      value={focusAreaSize} 
-                      onChange={(e) => setFocusAreaSize(Number(e.target.value))}
-                      className="w-full h-1 bg-[#222] appearance-none rounded-full accent-accent cursor-pointer"
+                      min={0} 
+                      max={100} 
+                      value={focus} 
+                      onChange={(e) => setFocus(Number(e.target.value))}
+                      className="w-full h-1.5 bg-[#333] appearance-none rounded-full accent-accent cursor-pointer"
                     />
                   </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+
+                  {focus > 0 && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300 pb-2">
+                      <div className="flex items-center justify-between text-[9px] font-bold text-text-dim uppercase tracking-wider">
+                        <div className="flex items-center gap-2">
+                          <Maximize size={10} className="text-accent" />
+                          <span>Subject Focus Area</span>
+                        </div>
+                        <span className="text-white italic">{focusAreaSize}%</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min={10} 
+                        max={70} 
+                        value={focusAreaSize} 
+                        onChange={(e) => setFocusAreaSize(Number(e.target.value))}
+                        className="w-full h-1 bg-[#222] appearance-none rounded-full accent-accent cursor-pointer"
+                      />
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {uiVisible && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-3"
+                >
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2.5 rounded-full border border-white/10 hover:border-accent transition-all bg-white/5 active:scale-90 flex items-center gap-2 pr-4"
+                    title="Upload Photo for Timemark"
+                  >
+                    <ImageIcon size={16} className="text-white" />
+                    <span className="text-[8px] font-black text-white uppercase tracking-widest">Gallery</span>
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*" 
+                    onChange={handleImageUpload} 
+                  />
+
+                  <button 
+                    onClick={() => setAutoAssist(!autoAssist)}
+                    className={`p-2.5 rounded-full border transition-all relative flex items-center gap-2 pr-4 ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
+                  >
+                    <Target size={16} className={autoAssist ? 'text-accent' : 'text-white'} />
+                    <span className={`text-[8px] font-black uppercase tracking-widest ${autoAssist ? 'text-accent' : 'text-white'}`}>AI Focus</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Center: Modes + Shutter */}
           <div className="flex flex-col items-center gap-2 pb-1">
@@ -1970,66 +2018,13 @@ export default function App() {
               )}
             </AnimatePresence>
 
-            <div className="flex items-center gap-4 md:gap-8 mt-1">
-              <AnimatePresence>
-                {uiVisible && (
-                  <>
-                    <motion.button 
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="p-2 md:p-3 rounded-full border border-white/10 hover:border-accent transition-all bg-white/5 active:scale-90"
-                      title="Upload Photo for Timemark"
-                    >
-                      <ImageIcon size={18} className="text-white" />
-                    </motion.button>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      className="hidden" 
-                      accept="image/*" 
-                      onChange={handleImageUpload} 
-                    />
-
-                    <motion.button 
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      onClick={() => {
-                        setShowPoseDots(!showPoseDots);
-                        if (!showPoseDots) analyzeScene(); 
-                      }}
-                      className={`p-2 md:p-3 rounded-full border transition-all relative ${showPoseDots ? 'border-accent bg-accent/20 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'border-white/10'}`}
-                      title="AI Pose Recommendation"
-                    >
-                      {showPoseDots && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-[#111] animate-pulse" />
-                      )}
-                      <Info size={18} className={showPoseDots ? 'text-accent' : 'text-white'} />
-                    </motion.button>
-
-                    <motion.button 
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      onClick={() => setAutoAssist(!autoAssist)}
-                      className={`p-2 md:p-3 rounded-full border transition-all relative ${autoAssist ? 'border-accent bg-accent/10' : 'border-white/10 hover:border-accent'}`}
-                    >
-                      {autoAssist && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-[#111]" />
-                      )}
-                      <Target size={18} className={autoAssist ? 'text-accent' : 'text-white'} />
-                    </motion.button>
-                  </>
-                )}
-              </AnimatePresence>
-
+            <div className="flex flex-col items-center gap-4">
               <button 
                 onClick={handleShutterClick}
-                className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-[3px] md:border-[4px] border-white p-1 hover:scale-105 active:scale-95 transition-all group ${!uiVisible ? 'ring-4 ring-accent/30' : ''}`}
+                className={`w-20 h-20 md:w-24 md:h-24 rounded-full border-[4px] md:border-[5px] border-white p-1.5 hover:scale-105 active:scale-90 transition-all group relative ${!uiVisible ? 'ring-8 ring-accent/30' : ''}`}
               >
-                <div className="w-full h-full rounded-full bg-white group-hover:bg-white/90 transition-colors" />
+                <div className="w-full h-full rounded-full bg-white group-hover:bg-white/90 shadow-2xl transition-all" />
+                <div className="absolute inset-0 rounded-full border border-white/20 animate-pulse scale-110 pointer-events-none" />
               </button>
 
               <AnimatePresence>
@@ -2039,9 +2034,10 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
                     onClick={toggleCamera}
-                    className="p-2 md:p-3 rounded-full border border-white/10 hover:border-white transition-colors"
+                    className="p-3 rounded-full border border-white/10 hover:border-white transition-colors flex items-center gap-2"
                   >
-                    <RotateCcw size={18} className={facingMode === 'user' ? 'rotate-180' : ''} />
+                    <RotateCcw size={16} className={facingMode === 'user' ? 'rotate-180 text-accent' : 'text-white'} />
+                    <span className="text-[8px] font-black text-white uppercase tracking-widest">Flip Cam</span>
                   </motion.button>
                 )}
               </AnimatePresence>
@@ -2055,24 +2051,38 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
-                className="flex md:flex-col items-center justify-end w-full gap-2 md:gap-1 text-right mt-1 md:mt-0"
+                className="flex md:flex-col items-center justify-end w-full gap-3 text-right mt-1 md:mt-0"
               >
-                <div className="flex flex-col items-end">
-                   <div className="flex items-center gap-2">
+                 <div className="flex flex-col items-center md:items-end gap-3">
+                   <div className="flex items-center gap-3">
+                     <button 
+                       onClick={() => {
+                         setShowPoseDots(!showPoseDots);
+                         if (!showPoseDots) analyzeScene(); 
+                       }}
+                       className={`p-3 rounded-xl border transition-all relative ${showPoseDots ? 'border-accent bg-accent/20 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'border-white/10 bg-white/5 hover:border-accent'}`}
+                       title="AI Pose Recommendation"
+                     >
+                       {showPoseDots && (
+                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border border-[#111] animate-pulse" />
+                       )}
+                       <Info size={18} className={showPoseDots ? 'text-accent' : 'text-white'} />
+                     </button>
+                     
                      <button 
                        onClick={() => setPoseIndex((poseIndex + 1) % poses.length)}
-                       className="p-2 rounded-lg bg-white/5 border border-white/10 hover:border-accent transition-all group relative"
+                       className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-accent transition-all group relative"
                        title="Switch Pose Guide"
                      >
-                       <SquareUser size={16} className="text-white group-hover:text-accent" />
-                       <div className="absolute -bottom-1 -right-1 w-1.5 h-1.5 bg-green-500 rounded-full border border-[#111]" />
+                       <SquareUser size={18} className="text-white group-hover:text-accent" />
                      </button>
-                     <div className="hidden md:flex flex-col items-end">
-                       <span className="text-[8px] text-text-dim font-bold uppercase tracking-tight">Active Pose</span>
-                       <span className="text-[10px] text-white font-mono leading-none">{poses[poseIndex].name}</span>
-                     </div>
                    </div>
-                </div>
+                   
+                   <div className="hidden md:flex flex-col items-end">
+                     <span className="text-[8px] text-text-dim font-black uppercase tracking-widest whitespace-nowrap">Neural Pose Guide</span>
+                     <span className="text-[10px] text-white font-mono leading-none border-b border-accent/40 pb-0.5">{poses[poseIndex].name}</span>
+                   </div>
+                 </div>
               </motion.div>
             )}
           </AnimatePresence>
