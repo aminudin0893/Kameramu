@@ -38,7 +38,9 @@ import {
   SquareUser,
   SlidersHorizontal,
   Image as ImageIcon,
-  Plus
+  Plus,
+  CameraOff,
+  Power
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -389,6 +391,7 @@ export default function App() {
   const [aiHumanDetection, setAiHumanDetection] = useState(false);
   const [subjectBox, setSubjectBox] = useState<{ymin:number, xmin:number, ymax:number, xmax:number} | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const isStartingRef = useRef(false);
 
   // AI Human Detection Auto-activation for iPhone Filters
   useEffect(() => {
@@ -567,7 +570,8 @@ export default function App() {
   }, [stream]);
 
   const startCamera = useCallback(async () => {
-    if (!hasStarted) return;
+    if (!hasStarted || isStartingRef.current) return;
+    isStartingRef.current = true;
     setIsInitializing(true);
     setCameraError(null);
     console.log("System: Starting camera sequence...", facingMode);
@@ -583,7 +587,7 @@ export default function App() {
       }
       
       // Delay longer to allow hardware release - critical for PWA context transitions
-      await new Promise(resolve => setTimeout(resolve, 400));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // 2. Constraints for Selected Resolution
       const resSettings = {
@@ -637,8 +641,9 @@ export default function App() {
       }
     } finally {
       setIsInitializing(false);
+      isStartingRef.current = false;
     }
-  }, [facingMode, hasStarted]);
+  }, [facingMode, hasStarted, resolution, stream]);
 
   useEffect(() => {
     if (hasStarted) {
@@ -1057,57 +1062,6 @@ export default function App() {
     ${mode === 'SCAN' ? 'contrast(1.5) brightness(1.1) saturate(1.15)' : activeFilter.css}
   `;
 
-  if (!hasStarted) {
-    return (
-      <div className="fixed inset-0 bg-bg flex items-center justify-center p-6 text-center">
-        <div className="max-w-md space-y-8">
-          <div className="space-y-4">
-            <div className="inline-flex p-4 bg-accent/5 rounded-full border border-accent/20 mb-4 scale-110">
-              <Camera size={48} className="text-accent" />
-            </div>
-            <h1 className="text-4xl font-bold text-white tracking-tighter uppercase italic leading-none">Lumix Pro Camera</h1>
-            <p className="text-text-dim text-sm px-4 leading-relaxed">
-              Selamat datang di aplikasi kamera profesional. <br/>
-              Aplikasi memerlukan izin akses kamera untuk berfungsi sebagai alat bidik presisi tinggi.
-            </p>
-          </div>
-          
-          <div className="pt-6 flex flex-col items-center gap-4">
-            <button 
-              onClick={async () => {
-                // Request orientation permission for iOS
-                if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-                  try {
-                    await (DeviceOrientationEvent as any).requestPermission();
-                  } catch (e) {
-                    console.warn("Sensor permission error:", e);
-                  }
-                }
-                setHasStarted(true);
-              }}
-              className="group relative inline-flex items-center gap-3 px-12 py-5 bg-accent text-white rounded-full font-bold uppercase tracking-widest text-[11px] hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-accent/40"
-            >
-              <span>Mulai Fotografi</span>
-              <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-
-            <button 
-              onClick={toggleFullscreen}
-              className="flex items-center gap-2 text-white/40 hover:text-white transition-colors text-[11px] uppercase font-bold tracking-[0.2em] border border-white/10 px-6 py-3 rounded-full hover:bg-white/5 active:scale-95"
-            >
-              <Maximize size={16} />
-              <span>Full Screen</span>
-            </button>
-
-            <p className="mt-4 text-[10px] text-text-dim font-mono tracking-widest opacity-30">
-              OPTIMIZED FOR MOBILE HP • VER 2.2.0
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const handleShutterClick = () => {
     if (timerDelay > 0 && countdown === null) {
       setCountdown(timerDelay);
@@ -1229,22 +1183,35 @@ export default function App() {
               {timerDelay > 0 && <span className="text-[10px] font-bold">{timerDelay}s</span>}
             </button>
             <button 
+              onClick={() => {
+                const toggleCameraPower = async () => {
+                   if (!hasStarted) {
+                     // Initial start usually needs a sensor permission trigger for some mobile features
+                     if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+                       try {
+                         await (DeviceOrientationEvent as any).requestPermission();
+                       } catch (e) {
+                         console.warn("Sensor permission error:", e);
+                       }
+                     }
+                     setHasStarted(true);
+                   } else {
+                     setHasStarted(false);
+                   }
+                };
+                toggleCameraPower();
+              }}
+              className={`p-1.5 transition-all outline-none ${hasStarted ? 'text-accent' : 'text-white/40 ring-1 ring-white/10 rounded-full'}`} 
+              title={hasStarted ? "Matikan Kamera" : "Aktifkan Kamera"}
+            >
+              <Power size={18} className={!hasStarted ? 'animate-pulse text-white' : 'text-accent'} />
+            </button>
+            <button 
               onClick={() => window.location.reload()}
               className="p-1.5 hover:text-white transition-colors" 
               title="Refresh Camera"
             >
               <RotateCw size={16} className="md:w-[18px] md:h-[18px]" />
-            </button>
-            <button 
-              onClick={() => {
-                setHasStarted(false);
-                if (stream) stream.getTracks().forEach(t => t.stop());
-                setStream(null);
-              }}
-              className="p-1.5 hover:text-white transition-colors" 
-              title="Home"
-            >
-              <Home size={16} className="md:w-[18px] md:h-[18px]" />
             </button>
             <button onClick={toggleFullscreen} className="p-1.5 hover:text-white transition-colors" title="Full Screen">
               <Maximize size={16} className="md:w-[18px] md:h-[18px]" />
@@ -1576,32 +1543,67 @@ export default function App() {
                 Retry Connection
               </button>
             </div>
-          ) : !stream ? (
-            <div className="flex flex-col items-center gap-6 z-50">
-              <div className="w-16 h-16 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-              <div className="flex flex-col items-center gap-2">
-                <span className="text-[10px] uppercase tracking-widest text-accent font-bold">Initializing Sensor...</span>
-                <p className="text-[9px] text-text-dim text-center px-8">Jika kamera tidak muncul, klik tombol di bawah untuk meminta izin ulang.</p>
-              </div>
-              <button 
-                onClick={startCamera}
-                className="px-6 py-2 bg-white text-black text-[10px] font-bold uppercase tracking-tighter hover:bg-white/90"
-              >
-                Aktifkan Kamera
-              </button>
-            </div>
           ) : (
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted
-              className={`w-full h-full object-cover transition-all ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
-              style={{ 
-                filter: cameraFilters,
-                WebkitFilter: cameraFilters,
-              }}
-            />
+            <div className="absolute inset-0 bg-[#080808] z-0">
+               {!hasStarted && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md p-6 text-center">
+                     <div className="w-16 h-16 rounded-full bg-accent/5 border border-accent/20 flex items-center justify-center mb-6 scale-110">
+                        <CameraOff size={24} className="text-accent/40" />
+                     </div>
+                     <h2 className="text-sm font-bold uppercase tracking-widest text-white mb-2">Sistem Kamera Standby</h2>
+                     <p className="text-[10px] text-text-dim max-w-[200px] leading-relaxed">
+                       Aktifkan lensa melalui tombol <span className="text-accent font-bold"> Power </span> di barisan atas untuk mulai.
+                     </p>
+                  </div>
+               )}
+
+               {isInitializing && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                     <div className="w-8 h-8 rounded-full border-2 border-accent border-t-transparent animate-spin mb-4" />
+                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/50">Initializing Lens...</span>
+                  </div>
+               )}
+
+               {cameraError ? (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-red-900/20 backdrop-blur-lg p-8 text-center">
+                     <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                        <Power size={20} className="text-red-500" />
+                     </div>
+                     <h3 className="text-white text-[11px] font-bold uppercase tracking-widest mb-1">{cameraError}</h3>
+                     <p className="text-white/40 text-[9px] mb-6 max-w-[240px]">Pastikan kamera tidak digunakan oleh aplikasi lain dan browser memiliki izin akses.</p>
+                     <div className="flex gap-3">
+                      <button 
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-2.5 bg-red-500 text-white text-[10px] font-bold uppercase tracking-widest rounded-full hover:bg-red-600 transition-colors shadow-lg"
+                      >
+                        Reset App
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setHasStarted(false);
+                          setCameraError(null);
+                          setTimeout(() => setHasStarted(true), 200);
+                        }}
+                        className="px-6 py-2.5 bg-white/10 text-white text-[10px] font-bold uppercase tracking-widest rounded-full hover:bg-white/20 transition-colors"
+                      >
+                        Retry Lens
+                      </button>
+                     </div>
+                  </div>
+                ) : hasStarted && stream && (
+                  <video 
+                     ref={videoRef} 
+                     autoPlay 
+                     playsInline 
+                     muted
+                     className={`w-full h-full object-cover transition-all duration-700 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                     style={{ 
+                       filter: cameraFilters,
+                       WebkitFilter: cameraFilters,
+                     }}
+                  />
+                )}
+            </div>
           )}
 
           {/* Side Panel Overlay (Theme Design) */}
