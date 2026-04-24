@@ -1414,11 +1414,25 @@ export default function App() {
             {capturedImage && (
               <div 
                 className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer" 
-                onClick={() => { setShowSettings(true); }}
+                onClick={() => { setShowSettings(true); setSettingsTab('TIMEMARK'); }}
               >
                 <img src={capturedImage} className="w-full h-full object-cover" />
               </div>
             )}
+            
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
+              className="p-3 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-full text-white hover:border-accent/40 shadow-2xl group flex items-center gap-2 self-start"
+              title="Refresh GPS Address"
+            >
+              <MapPin size={18} className={timemarkEnabled ? "text-accent" : "text-white/40"} />
+              <div className="flex flex-col items-start overflow-hidden">
+                <span className="text-[7px] font-black uppercase tracking-widest leading-none text-accent mb-0.5">GPS Sync</span>
+                <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Refresh Location</span>
+              </div>
+            </motion.button>
           </div>
 
           {aiHumanDetection && subjectBox && (
@@ -2125,46 +2139,14 @@ export default function App() {
                       referrerPolicy="no-referrer" />
 
                     {isUploadedImage && (
-                      <div className="absolute top-6 right-6 flex flex-col gap-3 z-[110] items-end">
-                        <div className="bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 flex flex-col gap-3 w-64 shadow-2xl animate-in fade-in slide-in-from-right-4 duration-500">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Address Mode</span>
-                            <div className="flex bg-white/5 p-1 rounded-lg">
-                              <button 
-                                onClick={() => setUseManualLocation(false)}
-                                className={`px-2 py-1 rounded-md text-[8px] font-bold transition-all ${!useManualLocation ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-white/40 hover:text-white'}`}
-                              >AUTO</button>
-                              <button 
-                                onClick={() => setUseManualLocation(true)}
-                                className={`px-2 py-1 rounded-md text-[8px] font-bold transition-all ${useManualLocation ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-white/40 hover:text-white'}`}
-                              >MANUAL</button>
-                            </div>
-                          </div>
-                          
-                          {useManualLocation ? (
-                            <textarea 
-                              placeholder="Ketik alamat manual di sini..."
-                              value={manualLocationText}
-                              onChange={(e) => setManualLocationText(e.target.value)}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-white focus:outline-none focus:border-accent min-h-[80px] resize-none placeholder:text-white/20 transition-colors"
-                            />
-                          ) : (
-                            <div className="bg-white/5 rounded-xl px-3 py-2 flex items-start gap-2 border border-white/5">
-                              <MapPin size={10} className="text-accent shrink-0 mt-0.5" />
-                              <span className="text-[9px] text-white/60 leading-relaxed italic line-clamp-3">{locationText}</span>
-                            </div>
-                          )}
-                          
-                          <button 
-                            onClick={applyManualTimemark}
-                            className="w-full py-4 bg-accent shadow-[0_0_30px_rgba(255,77,0,0.3)] border border-accent rounded-xl text-[10px] uppercase font-black tracking-[0.2em] text-white flex items-center justify-center gap-3 hover:bg-accent/90 transition-all active:scale-95 group"
-                          >
-                            <Clock size={16} className="group-hover:rotate-12 transition-transform" />
-                            Generate Timemark
-                          </button>
-                          
-                          <p className="text-[7px] text-center text-white/20 uppercase tracking-widest font-bold">Press to apply changes to photo</p>
-                        </div>
+                      <div className="absolute top-6 right-6 flex flex-col gap-2 z-[110]">
+                        <button 
+                          onClick={applyManualTimemark}
+                          className="px-6 py-3 bg-accent shadow-[0_0_20px_rgba(255,77,0,0.4)] border border-accent rounded-xl text-xs md:text-sm uppercase font-black tracking-[0.2em] text-white flex items-center gap-3 hover:bg-accent/90 transition-all active:scale-95 animate-in fade-in zoom-in duration-300"
+                        >
+                          <Clock size={18} />
+                          Give Timemark Manual
+                        </button>
                       </div>
                     )}
                  
