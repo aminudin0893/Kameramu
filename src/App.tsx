@@ -558,21 +558,28 @@ export default function App() {
   // Initialize Camera
   const startCamera = useCallback(async () => {
     if (!hasStarted) return;
+    
     setIsInitializing(true);
     setCameraError(null);
-    console.log("System: Starting camera sequence...", facingMode);
     
+    // 1. Extreme Cleanup: ensure everything is stopped before restart
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      setStream(null);
+    }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    // Small delay to allow hardware release
+    await new Promise(resolve => setTimeout(resolve, 200));
+
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("NOT_SUPPORTED");
       }
 
-      // 1. Cleanup existing stream
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
-
-      // 2. Constraints for Selected Resolution
       const resSettings = {
         HD: { w: 1920, h: 1080 },
         UHD: { w: 3840, h: 2160 }
@@ -581,8 +588,8 @@ export default function App() {
       const constraints: MediaStreamConstraints = { 
         video: { 
           facingMode: { ideal: facingMode }, 
-          width: { ideal: resSettings[resolution].w, min: 1280 },
-          height: { ideal: resSettings[resolution].h, min: 720 },
+          width: { ideal: resSettings[resolution].w },
+          height: { ideal: resSettings[resolution].h },
           frameRate: { ideal: 60 }
         },
         audio: false
@@ -594,38 +601,47 @@ export default function App() {
       if (videoRef.current) {
         const video = videoRef.current;
         video.srcObject = res;
-        
         video.setAttribute('playsinline', '');
-        video.setAttribute('muted', '');
-        video.muted = true;
-        
-        setTimeout(() => {
-          video.play().catch(e => {
-            console.warn("Auto-play prevented by browser policy", e);
-          });
-        }, 50);
+        video.onloadedmetadata = () => {
+          video.play().catch(e => console.warn("Auto-play prevented:", e));
+        };
       }
     } catch (err: any) {
-      console.warn("Camera init failed, trying fallback:", err);
+      console.warn("Primary camera init failed:", err.name, err.message);
+      
+      // Fallback 1: Try without high-res constraints
       try {
-        const fallbackRes = await navigator.mediaDevices.getUserMedia({ video: true });
-        setStream(fallbackRes);
+        const fallback1 = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: { ideal: facingMode } } 
+        });
+        setStream(fallback1);
         if (videoRef.current) {
-          videoRef.current.srcObject = fallbackRes;
-          videoRef.current.play().catch(e => console.error("Final play failure", e));
+          videoRef.current.srcObject = fallback1;
+          videoRef.current.play();
         }
-      } catch (fallbackErr: any) {
-        let msg = "Kamera Gagal Dimuat.";
-        if (fallbackErr.name === 'NotAllowedError') msg = "Izin Ditolak. Silakan aktifkan izin kamera di pengaturan browser.";
-        else if (fallbackErr.name === 'NotFoundError') msg = "Hardware kamera tidak terdeteksi.";
-        else if (window.location.protocol !== 'https:') msg = "Akses kamera membutuhkan koneksi HTTPS aman.";
-        
-        setCameraError(`${msg} (${fallbackErr.name})`);
+      } catch (err2: any) {
+        console.warn("Fallback 1 failed:", err2.name);
+        // Fallback 2: Absolute basic (any camera)
+        try {
+          const fallback2 = await navigator.mediaDevices.getUserMedia({ video: true });
+          setStream(fallback2);
+          if (videoRef.current) {
+            videoRef.current.srcObject = fallback2;
+            videoRef.current.play();
+          }
+        } catch (err3: any) {
+          let msg = "Kamera Gagal Dimuat.";
+          if (err3.name === 'NotAllowedError') msg = "Izin Ditolak. Silakan aktifkan izin kamera.";
+          else if (err3.name === 'NotFoundError') msg = "Hardware kamera tidak terdeteksi.";
+          else if (err3.name === 'NotReadableError') msg = "Kamera sedang digunakan oleh aplikasi lain. Tutup aplikasi lain dan coba lagi.";
+          
+          setCameraError(`${msg} (${err3.name})`);
+        }
       }
     } finally {
       setIsInitializing(false);
     }
-  }, [facingMode, hasStarted]);
+  }, [facingMode, hasStarted, resolution]);
 
   useEffect(() => {
     if (hasStarted) {
@@ -1414,25 +1430,41 @@ export default function App() {
             {capturedImage && (
               <div 
                 className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer" 
-                onClick={() => { setShowSettings(true); setSettingsTab('TIMEMARK'); }}
+                onClick={() => { setShowSettings(true); }}
               >
                 <img src={capturedImage} className="w-full h-full object-cover" />
               </div>
             )}
             
-            <motion.button 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
-              className="p-3 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-full text-white hover:border-accent/40 shadow-2xl group flex items-center gap-2 self-start"
-              title="Refresh GPS Address"
-            >
-              <MapPin size={18} className={timemarkEnabled ? "text-accent" : "text-white/40"} />
-              <div className="flex flex-col items-start overflow-hidden">
-                <span className="text-[7px] font-black uppercase tracking-widest leading-none text-accent mb-0.5">GPS Sync</span>
-                <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Refresh Location</span>
-              </div>
-            </motion.button>
+            <div className="flex flex-col gap-2">
+              <motion.button 
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
+                className={`p-3 backdrop-blur-2xl border rounded-full shadow-2xl group flex items-center gap-2 self-start transition-colors ${timemarkEnabled ? 'bg-accent/20 border-accent/40 text-accent' : 'bg-black/60 border-white/10 text-white'}`}
+                title="Refresh GPS Address"
+              >
+                <MapPin size={20} className={timemarkEnabled ? "text-accent animate-pulse" : "text-white/80"} />
+                <div className="flex flex-col items-start overflow-hidden">
+                  <span className="text-[7px] font-black uppercase tracking-widest leading-none mb-0.5">GPS Sensor</span>
+                  <span className="text-[9px] font-bold uppercase tracking-tight whitespace-nowrap">
+                    {locationText === "Pro Sensor Active" ? "Connect GPS" : "Status: Active"}
+                  </span>
+                </div>
+              </motion.button>
+              
+              {locationText !== "Pro Sensor Active" && locationText !== "GPS Access Denied" && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/5 max-w-[180px]"
+                >
+                  <p className="text-[8px] text-white/60 font-mono line-clamp-2 uppercase leading-tight italic">
+                    {locationText}
+                  </p>
+                </motion.div>
+              )}
+            </div>
           </div>
 
           {aiHumanDetection && subjectBox && (
