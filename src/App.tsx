@@ -361,6 +361,7 @@ export default function App() {
   const [torchOn, setTorchOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [initStartTime, setInitStartTime] = useState<number | null>(null);
   const isInitializingRef = useRef(false);
   const [isUploadedImage, setIsUploadedImage] = useState(false);
   const currentStreamRef = useRef<MediaStream | null>(null);
@@ -564,6 +565,7 @@ export default function App() {
     
     isInitializingRef.current = true;
     setIsInitializing(true);
+    setInitStartTime(Date.now());
     setCameraError(null);
     
     try {
@@ -600,13 +602,9 @@ export default function App() {
       const res = await navigator.mediaDevices.getUserMedia(constraints);
       currentStreamRef.current = res;
       setStream(res);
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = res;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(() => {});
-        };
-      }
+      // NOTE: We no longer set srcObject here because the video element 
+      // might not be mounted yet due to conditional rendering. 
+      // It is handled by the useEffect below.
     } catch (err: any) {
       console.warn("Camera Init Failed:", err.name);
       
@@ -635,12 +633,53 @@ export default function App() {
     if (hasStarted) {
       startCamera();
     }
+  }, [hasStarted, facingMode, resolution, startCamera]);
+
+  // Handle cleanup only on unmount or when explicitly stopping photography
+  useEffect(() => {
     return () => {
       if (currentStreamRef.current) {
+        console.log("Global cleanup: stopping camera tracks");
         currentStreamRef.current.getTracks().forEach(t => t.stop());
+        currentStreamRef.current = null;
       }
     };
-  }, [hasStarted, facingMode, resolution, startCamera]);
+  }, []);
+
+  // Attach stream to video element when it mounts
+  const onVideoMount = useCallback((node: HTMLVideoElement | null) => {
+    if (node) {
+      // Re-assign the ref for other uses
+      (videoRef as any).current = node;
+      
+      if (stream) {
+        console.log("Attaching stream to mounted video element");
+        node.srcObject = stream;
+        // Basic attributes for mobile compatibility
+        node.muted = true;
+        node.playsInline = true;
+        node.setAttribute('playsinline', '');
+        node.setAttribute('muted', '');
+        
+        node.play().catch(err => {
+          console.warn("Video play failed on mount:", err);
+          // Try one more time after a short delay
+          setTimeout(() => node.play().catch(() => {}), 500);
+        });
+      }
+    }
+  }, [stream]);
+
+  // Separate Effect to sync stream changes to the existing ref
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      if (videoRef.current.srcObject !== stream) {
+        console.log("Syncing new stream to existing video element");
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.warn("Video sync play failed:", e));
+      }
+    }
+  }, [stream]);
 
   // GPS Button Fix - Ensure it's basic and visible
   const renderGPSButton = () => (
@@ -1539,22 +1578,24 @@ export default function App() {
             )}
           </AnimatePresence>
           {cameraError ? (
-            <div className="text-center p-8 space-y-4 z-50">
-              <Camera size={48} className="mx-auto text-accent mb-4 opacity-50" />
-              <p className="text-white text-sm font-bold uppercase tracking-widest">Camera Error</p>
-              <p className="text-text-dim text-xs max-w-xs leading-relaxed">{cameraError}</p>
+            <div className="text-center p-8 space-y-4 z-50 bg-black/80 backdrop-blur-2xl rounded-3xl border border-white/10 m-6 shadow-2xl">
+              <Camera size={48} className="mx-auto text-accent mb-4 animate-pulse" />
+              <p className="text-white text-base font-bold uppercase tracking-widest">Kamera Terdeteksi Sibuk</p>
+              <p className="text-text-dim text-xs max-w-xs leading-relaxed mx-auto">{cameraError}</p>
+              <p className="text-white/40 text-[9px] uppercase tracking-tighter">Pastikan aplikasi lain (WhatsApp, Instagram, dll) sudah ditutup.</p>
               <div className="flex flex-col gap-3 mt-6">
                 <button 
                   onClick={startCamera}
-                  className="px-6 py-3 bg-accent text-white text-[11px] font-bold uppercase tracking-widest hover:scale-105 transition-transform shadow-lg shadow-accent/20"
+                  className="px-6 py-4 bg-accent text-white text-[11px] font-bold uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-accent/40 rounded-full"
                 >
-                  Hubungkan Ulang Kamera
+                  Segarkan Koneksi Kamera
                 </button>
+                <div className="h-px bg-white/10 w-24 mx-auto my-2" />
                 <button 
                   onClick={() => window.location.reload()}
-                  className="px-6 py-2 border border-white/20 text-white/60 text-[9px] font-bold uppercase tracking-tighter hover:text-white transition-colors"
+                  className="px-6 py-3 border border-white/20 text-white/60 text-[9px] font-bold uppercase tracking-tighter hover:text-white transition-colors rounded-full"
                 >
-                  Hard Reset (Refresh)
+                  Force Hard Reset (Refresh)
                 </button>
               </div>
             </div>
@@ -1563,18 +1604,34 @@ export default function App() {
               <div className="w-16 h-16 rounded-full border-2 border-accent border-t-transparent animate-spin" />
               <div className="flex flex-col items-center gap-2">
                 <span className="text-[10px] uppercase tracking-widest text-accent font-bold">Initializing Sensor...</span>
-                <p className="text-[9px] text-text-dim text-center px-8">Jika kamera tidak muncul, klik tombol di bawah untuk meminta izin ulang.</p>
+                <p className="text-[9px] text-text-dim text-center px-8">Menghubungkan ke modul sensor kamera.</p>
               </div>
+              
+              {initStartTime && (Date.now() - initStartTime > 5000) && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="bg-black/40 p-4 rounded-xl border border-white/5 max-w-xs text-center"
+                >
+                  <p className="text-[9px] text-white/60 mb-2">Terlalu lama? Coba langkah berikut:</p>
+                  <ul className="text-[8px] text-white/40 space-y-1 list-disc list-inside text-left">
+                    <li>Pastikan tidak ada aplikasi lain (WhatsApp/Chrome lain) buka kamera.</li>
+                    <li>Segarkan halaman atau restart browser Anda.</li>
+                    <li>Berikan izin 'Kamera' jika ada permintaan di atas.</li>
+                  </ul>
+                </motion.div>
+              )}
+
               <button 
                 onClick={startCamera}
                 className="px-6 py-2 bg-white text-black text-[10px] font-bold uppercase tracking-tighter hover:bg-white/90"
               >
-                Aktifkan Kamera
+                Coba Lagi
               </button>
             </div>
           ) : (
             <video 
-              ref={videoRef} 
+              ref={onVideoMount} 
               autoPlay 
               playsInline 
               muted
