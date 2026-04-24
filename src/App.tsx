@@ -558,38 +558,51 @@ export default function App() {
 
   // Initialize Camera
   const startCamera = useCallback(async () => {
-    if (!hasStarted) return;
+    if (!hasStarted || isInitializing) return;
     
     setIsInitializing(true);
     setCameraError(null);
     
     const stopAllTracks = () => {
+      // 1. Clear refs first to prevent usage during cleanup
       if (currentStreamRef.current) {
-        currentStreamRef.current.getTracks().forEach(t => t.stop());
+        currentStreamRef.current.getTracks().forEach(t => {
+          try { t.stop(); } catch(e) {}
+        });
         currentStreamRef.current = null;
       }
+      
+      // 2. Clear state
       if (stream) {
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(t => {
+          try { t.stop(); } catch(e) {}
+        });
         setStream(null);
       }
+      
+      // 3. Detach from video element
       if (videoRef.current) {
-        videoRef.current.srcObject = null;
+        const video = videoRef.current;
+        video.pause();
+        video.srcObject = null;
+        video.load(); // Forces release of media resources in some browsers
       }
     };
 
     stopAllTracks();
 
-    // Larger delay to allow hardware release
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // 4. Substantial delay to ensure hardware is released by previous attempts/processes
+    await new Promise(resolve => setTimeout(resolve, 800));
 
     const attemptCapture = async (constraints: MediaStreamConstraints) => {
       try {
         const res = await navigator.mediaDevices.getUserMedia(constraints);
         return res;
       } catch (e: any) {
-        if (e.name === 'NotReadableError' || e.name === 'SourceUnavailableError') {
-          // Retry after a longer delay if busy
-          await new Promise(r => setTimeout(r, 1000));
+        console.warn(`Camera attempt failed (${e.name}):`, e.message);
+        if (e.name === 'NotReadableError' || e.name === 'SourceUnavailableError' || e.name === 'AbortError') {
+          // Hardware is locked or busy. Wait longer and try one last time.
+          await new Promise(r => setTimeout(r, 1500));
           return await navigator.mediaDevices.getUserMedia(constraints);
         }
         throw e;
@@ -606,12 +619,12 @@ export default function App() {
         UHD: { w: 1920, h: 1080 }
       };
       
+      // Removed frameRate as it can cause NotReadableError on some mobile chipsets
       const constraints: MediaStreamConstraints = { 
         video: { 
           facingMode: { ideal: facingMode }, 
           width: { ideal: resSettings[resolution].w },
-          height: { ideal: resSettings[resolution].h },
-          frameRate: { ideal: 30 }
+          height: { ideal: resSettings[resolution].h }
         },
         audio: false
       };
@@ -625,13 +638,16 @@ export default function App() {
         video.srcObject = res;
         video.setAttribute('playsinline', '');
         video.onloadedmetadata = () => {
-          video.play().catch(e => console.warn("Auto-play prevented:", e));
+          // Small delay before play() after metadata is loaded
+          setTimeout(() => {
+            video.play().catch(e => console.warn("Auto-play prevented (retrying):", e));
+          }, 100);
         };
       }
     } catch (err: any) {
-      console.warn("Primary camera init failed:", err.name, err.message);
+      console.error("Camera system fail:", err.name, err.message);
       
-      // Fallback 1: Relaxed constraints
+      // Fallback 1: Maximum compatibility (No specific resolution)
       try {
         const fallback1 = await attemptCapture({ 
           video: { facingMode: { ideal: facingMode } } 
@@ -643,10 +659,10 @@ export default function App() {
           videoRef.current.play().catch(e => console.error("Fallback 1 play failed", e));
         }
       } catch (err2: any) {
-        console.warn("Fallback 1 failed:", err2.name);
-        // Fallback 2: Any camera
+        console.warn("Fallback 1 failed, trying absolute basic:", err2.name);
+        // Fallback 2: Absolute basic (any camera, any setting)
         try {
-          const fallback2 = await attemptCapture({ video: true });
+          const fallback2 = await navigator.mediaDevices.getUserMedia({ video: true });
           currentStreamRef.current = fallback2;
           setStream(fallback2);
           if (videoRef.current) {
@@ -655,9 +671,15 @@ export default function App() {
           }
         } catch (err3: any) {
           let msg = "Kamera Gagal Dimuat.";
-          if (err3.name === 'NotAllowedError') msg = "Izin Ditolak. Silakan aktifkan izin kamera.";
-          else if (err3.name === 'NotFoundError') msg = "Hardware kamera tidak terdeteksi.";
-          else if (err3.name === 'NotReadableError') msg = "Kamera sedang digunakan oleh aplikasi lain.";
+          if (err3.name === 'NotAllowedError') {
+            msg = "Izin Ditolak. Harap izinkan akses kamera di pengaturan browser/HP Anda.";
+          } else if (err3.name === 'NotFoundError') {
+            msg = "Hardware kamera tidak ditemukan.";
+          } else if (err3.name === 'NotReadableError') {
+            msg = "Kamera sedang digunakan oleh aplikasi lain (seperti WhatsApp, Chrome, atau sistem).";
+          } else if (err3.name === 'AbortError') {
+            msg = "Sistem menghentikan akses kamera. Coba restart browser.";
+          }
           
           setCameraError(`${msg} (${err3.name})`);
         }
@@ -665,7 +687,7 @@ export default function App() {
     } finally {
       setIsInitializing(false);
     }
-  }, [facingMode, hasStarted, resolution]);
+  }, [facingMode, hasStarted, resolution, isInitializing]); // Added isInitializing to deps to ensure stability
 
   useEffect(() => {
     if (hasStarted) {
