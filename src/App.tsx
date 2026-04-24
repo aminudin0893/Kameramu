@@ -24,6 +24,7 @@ import {
   X,
   Zap,
   ZapOff,
+  MapPin,
   Clock,
   History,
   Palette,
@@ -38,9 +39,7 @@ import {
   SquareUser,
   SlidersHorizontal,
   Image as ImageIcon,
-  Plus,
-  CameraOff,
-  Power
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -391,7 +390,26 @@ export default function App() {
   const [aiHumanDetection, setAiHumanDetection] = useState(false);
   const [subjectBox, setSubjectBox] = useState<{ymin:number, xmin:number, ymax:number, xmax:number} | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const isStartingRef = useRef(false);
+
+  // PWA logic
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   // AI Human Detection Auto-activation for iPhone Filters
   useEffect(() => {
@@ -559,19 +577,8 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize Camera
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => {
-        track.stop();
-        console.log("System: Track stopped:", track.label);
-      });
-      setStream(null);
-    }
-  }, [stream]);
-
   const startCamera = useCallback(async () => {
-    if (!hasStarted || isStartingRef.current) return;
-    isStartingRef.current = true;
+    if (!hasStarted) return;
     setIsInitializing(true);
     setCameraError(null);
     console.log("System: Starting camera sequence...", facingMode);
@@ -581,13 +588,10 @@ export default function App() {
         throw new Error("NOT_SUPPORTED");
       }
 
-      // 1. Explicitly stop current stream before requesting new one
+      // 1. Cleanup existing stream
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
       }
-      
-      // Delay longer to allow hardware release - critical for PWA context transitions
-      await new Promise(resolve => setTimeout(resolve, 500));
 
       // 2. Constraints for Selected Resolution
       const resSettings = {
@@ -641,9 +645,8 @@ export default function App() {
       }
     } finally {
       setIsInitializing(false);
-      isStartingRef.current = false;
     }
-  }, [facingMode, hasStarted, resolution, stream]);
+  }, [facingMode, hasStarted]);
 
   useEffect(() => {
     if (hasStarted) {
@@ -653,39 +656,6 @@ export default function App() {
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
   }, [facingMode, hasStarted, resolution]);
-
-  // PWA & Visibility Lifecycle Management
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        stopCamera();
-      } else if (document.visibilityState === 'visible' && hasStarted) {
-        startCamera();
-      }
-    };
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    
-    return () => {
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, [hasStarted, startCamera, stopCamera]);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
-  };
 
   // Handle Torch
   useEffect(() => {
@@ -1062,6 +1032,57 @@ export default function App() {
     ${mode === 'SCAN' ? 'contrast(1.5) brightness(1.1) saturate(1.15)' : activeFilter.css}
   `;
 
+  if (!hasStarted) {
+    return (
+      <div className="fixed inset-0 bg-bg flex items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-8">
+          <div className="space-y-4">
+            <div className="inline-flex p-4 bg-accent/5 rounded-full border border-accent/20 mb-4 scale-110">
+              <Camera size={48} className="text-accent" />
+            </div>
+            <h1 className="text-4xl font-bold text-white tracking-tighter uppercase italic leading-none">Lumix Pro Camera</h1>
+            <p className="text-text-dim text-sm px-4 leading-relaxed">
+              Selamat datang di aplikasi kamera profesional. <br/>
+              Aplikasi memerlukan izin akses kamera untuk berfungsi sebagai alat bidik presisi tinggi.
+            </p>
+          </div>
+          
+          <div className="pt-6 flex flex-col items-center gap-4">
+            <button 
+              onClick={async () => {
+                // Request orientation permission for iOS
+                if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+                  try {
+                    await (DeviceOrientationEvent as any).requestPermission();
+                  } catch (e) {
+                    console.warn("Sensor permission error:", e);
+                  }
+                }
+                setHasStarted(true);
+              }}
+              className="group relative inline-flex items-center gap-3 px-12 py-5 bg-accent text-white rounded-full font-bold uppercase tracking-widest text-[11px] hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-accent/40"
+            >
+              <span>Mulai Fotografi</span>
+              <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+
+            <button 
+              onClick={toggleFullscreen}
+              className="flex items-center gap-2 text-white/40 hover:text-white transition-colors text-[11px] uppercase font-bold tracking-[0.2em] border border-white/10 px-6 py-3 rounded-full hover:bg-white/5 active:scale-95"
+            >
+              <Maximize size={16} />
+              <span>Full Screen</span>
+            </button>
+
+            <p className="mt-4 text-[10px] text-text-dim font-mono tracking-widest opacity-30">
+              OPTIMIZED FOR MOBILE HP • VER 2.2.0
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleShutterClick = () => {
     if (timerDelay > 0 && countdown === null) {
       setCountdown(timerDelay);
@@ -1183,35 +1204,22 @@ export default function App() {
               {timerDelay > 0 && <span className="text-[10px] font-bold">{timerDelay}s</span>}
             </button>
             <button 
-              onClick={() => {
-                const toggleCameraPower = async () => {
-                   if (!hasStarted) {
-                     // Initial start usually needs a sensor permission trigger for some mobile features
-                     if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-                       try {
-                         await (DeviceOrientationEvent as any).requestPermission();
-                       } catch (e) {
-                         console.warn("Sensor permission error:", e);
-                       }
-                     }
-                     setHasStarted(true);
-                   } else {
-                     setHasStarted(false);
-                   }
-                };
-                toggleCameraPower();
-              }}
-              className={`p-1.5 transition-all outline-none ${hasStarted ? 'text-accent' : 'text-white/40 ring-1 ring-white/10 rounded-full'}`} 
-              title={hasStarted ? "Matikan Kamera" : "Aktifkan Kamera"}
-            >
-              <Power size={18} className={!hasStarted ? 'animate-pulse text-white' : 'text-accent'} />
-            </button>
-            <button 
               onClick={() => window.location.reload()}
               className="p-1.5 hover:text-white transition-colors" 
               title="Refresh Camera"
             >
               <RotateCw size={16} className="md:w-[18px] md:h-[18px]" />
+            </button>
+            <button 
+              onClick={() => {
+                setHasStarted(false);
+                if (stream) stream.getTracks().forEach(t => t.stop());
+                setStream(null);
+              }}
+              className="p-1.5 hover:text-white transition-colors" 
+              title="Home"
+            >
+              <Home size={16} className="md:w-[18px] md:h-[18px]" />
             </button>
             <button onClick={toggleFullscreen} className="p-1.5 hover:text-white transition-colors" title="Full Screen">
               <Maximize size={16} className="md:w-[18px] md:h-[18px]" />
@@ -1371,6 +1379,7 @@ export default function App() {
                         />
                      ) : (
                         <div className="flex items-center gap-2 text-[8px] text-text-dim pt-1">
+                          <MapPin size={8} />
                           <span className="line-clamp-2 leading-relaxed">{locationText}</span>
                         </div>
                      )}
@@ -1422,35 +1431,33 @@ export default function App() {
           </div>
 
           {/* Top-Left Control Actions */}
-          <div className="absolute top-6 left-6 z-[45] flex flex-col gap-3">
+          <div className="absolute top-6 left-6 z-[45] flex flex-col gap-4">
             {capturedImage && (
               <div 
-                className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer mb-2" 
+                className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer" 
                 onClick={() => { setShowSettings(true); }}
               >
                 <img src={capturedImage} className="w-full h-full object-cover" />
               </div>
             )}
 
-            <div className="flex flex-col gap-2">
-              {deferredPrompt && (
-                <motion.button 
-                  initial={{ opacity: 0, x: -20, scale: 0.8 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={(e) => { e.stopPropagation(); handleInstallClick(); }}
-                  className="p-3 bg-accent/20 backdrop-blur-2xl border border-accent/40 rounded-full text-white shadow-2xl group flex items-center gap-2 self-start"
-                  title="Install App"
-                >
-                  <Download size={18} className="text-accent" />
-                  <div className="flex flex-col items-start overflow-hidden">
-                    <span className="text-[7px] font-black uppercase tracking-widest leading-none text-accent mb-0.5">PWA Ready</span>
-                    <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Install App</span>
-                  </div>
-                </motion.button>
-              )}
-            </div>
+            {deferredPrompt && (
+              <motion.button 
+                initial={{ opacity: 0, x: -20, scale: 0.8 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={(e) => { e.stopPropagation(); handleInstallClick(); }}
+                className="p-3 bg-accent backdrop-blur-2xl border border-white/20 rounded-full text-white shadow-[0_0_20px_rgba(255,77,0,0.3)] group flex items-center gap-2 self-start"
+                title="Install App"
+              >
+                <Download size={18} className="text-white" />
+                <div className="flex flex-col items-start overflow-hidden">
+                  <span className="text-[7px] font-black uppercase tracking-widest leading-none text-white/70 mb-0.5">App Ready</span>
+                  <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Install App</span>
+                </div>
+              </motion.button>
+            )}
           </div>
 
           {aiHumanDetection && subjectBox && (
@@ -1543,67 +1550,32 @@ export default function App() {
                 Retry Connection
               </button>
             </div>
-          ) : (
-            <div className="absolute inset-0 bg-[#080808] z-0">
-               {!hasStarted && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md p-6 text-center">
-                     <div className="w-16 h-16 rounded-full bg-accent/5 border border-accent/20 flex items-center justify-center mb-6 scale-110">
-                        <CameraOff size={24} className="text-accent/40" />
-                     </div>
-                     <h2 className="text-sm font-bold uppercase tracking-widest text-white mb-2">Sistem Kamera Standby</h2>
-                     <p className="text-[10px] text-text-dim max-w-[200px] leading-relaxed">
-                       Aktifkan lensa melalui tombol <span className="text-accent font-bold"> Power </span> di barisan atas untuk mulai.
-                     </p>
-                  </div>
-               )}
-
-               {isInitializing && (
-                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px]">
-                     <div className="w-8 h-8 rounded-full border-2 border-accent border-t-transparent animate-spin mb-4" />
-                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/50">Initializing Lens...</span>
-                  </div>
-               )}
-
-               {cameraError ? (
-                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-red-900/20 backdrop-blur-lg p-8 text-center">
-                     <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-                        <Power size={20} className="text-red-500" />
-                     </div>
-                     <h3 className="text-white text-[11px] font-bold uppercase tracking-widest mb-1">{cameraError}</h3>
-                     <p className="text-white/40 text-[9px] mb-6 max-w-[240px]">Pastikan kamera tidak digunakan oleh aplikasi lain dan browser memiliki izin akses.</p>
-                     <div className="flex gap-3">
-                      <button 
-                        onClick={() => window.location.reload()}
-                        className="px-6 py-2.5 bg-red-500 text-white text-[10px] font-bold uppercase tracking-widest rounded-full hover:bg-red-600 transition-colors shadow-lg"
-                      >
-                        Reset App
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setHasStarted(false);
-                          setCameraError(null);
-                          setTimeout(() => setHasStarted(true), 200);
-                        }}
-                        className="px-6 py-2.5 bg-white/10 text-white text-[10px] font-bold uppercase tracking-widest rounded-full hover:bg-white/20 transition-colors"
-                      >
-                        Retry Lens
-                      </button>
-                     </div>
-                  </div>
-                ) : hasStarted && stream && (
-                  <video 
-                     ref={videoRef} 
-                     autoPlay 
-                     playsInline 
-                     muted
-                     className={`w-full h-full object-cover transition-all duration-700 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
-                     style={{ 
-                       filter: cameraFilters,
-                       WebkitFilter: cameraFilters,
-                     }}
-                  />
-                )}
+          ) : !stream ? (
+            <div className="flex flex-col items-center gap-6 z-50">
+              <div className="w-16 h-16 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-accent font-bold">Initializing Sensor...</span>
+                <p className="text-[9px] text-text-dim text-center px-8">Jika kamera tidak muncul, klik tombol di bawah untuk meminta izin ulang.</p>
+              </div>
+              <button 
+                onClick={startCamera}
+                className="px-6 py-2 bg-white text-black text-[10px] font-bold uppercase tracking-tighter hover:bg-white/90"
+              >
+                Aktifkan Kamera
+              </button>
             </div>
+          ) : (
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted
+              className={`w-full h-full object-cover transition-all ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+              style={{ 
+                filter: cameraFilters,
+                WebkitFilter: cameraFilters,
+              }}
+            />
           )}
 
           {/* Side Panel Overlay (Theme Design) */}
@@ -1803,6 +1775,7 @@ export default function App() {
                   </div>
                 {(locationText || timemarkManualText) && (
                   <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                    <MapPin size={12} className="text-accent" />
                     <span className="text-[10px] font-mono text-white/80 uppercase tracking-tight">
                       {timemarkManualText ? `${timemarkManualText} • ` : ''}{locationText}
                     </span>
@@ -2216,6 +2189,7 @@ export default function App() {
                             />
                           ) : (
                             <div className="bg-white/5 rounded-xl px-3 py-2 flex items-start gap-2 border border-white/5">
+                              <MapPin size={10} className="text-accent shrink-0 mt-0.5" />
                               <span className="text-[9px] text-white/60 leading-relaxed italic line-clamp-3">{locationText}</span>
                             </div>
                           )}
