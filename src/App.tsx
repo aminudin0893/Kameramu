@@ -1431,33 +1431,49 @@ export default function App() {
           </div>
 
           {/* Top-Left Control Actions */}
-          <div className="absolute top-6 left-6 z-[45] flex flex-col gap-4">
+          <div className="absolute top-6 left-6 z-[45] flex flex-col gap-3">
             {capturedImage && (
               <div 
-                className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer" 
+                className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer mb-2" 
                 onClick={() => { setShowSettings(true); }}
               >
                 <img src={capturedImage} className="w-full h-full object-cover" />
               </div>
             )}
 
-            {deferredPrompt && (
+            <div className="flex flex-col gap-2">
               <motion.button 
-                initial={{ opacity: 0, x: -20, scale: 0.8 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={(e) => { e.stopPropagation(); handleInstallClick(); }}
-                className="p-3 bg-accent backdrop-blur-2xl border border-white/20 rounded-full text-white shadow-[0_0_20px_rgba(255,77,0,0.3)] group flex items-center gap-2 self-start"
-                title="Install App"
+                onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
+                className="p-3 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-full text-white hover:border-accent/40 shadow-2xl group flex items-center gap-2 self-start"
+                title="Refresh GPS Address"
               >
-                <Download size={18} className="text-white" />
+                <MapPin size={18} className={timemarkEnabled ? "text-accent" : "text-white/40"} />
                 <div className="flex flex-col items-start overflow-hidden">
-                  <span className="text-[7px] font-black uppercase tracking-widest leading-none text-white/70 mb-0.5">App Ready</span>
-                  <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Install App</span>
+                  <span className="text-[7px] font-black uppercase tracking-widest leading-none text-accent mb-0.5">GPS Sync</span>
+                  <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Refresh Location</span>
                 </div>
               </motion.button>
-            )}
+
+              {deferredPrompt && (
+                <motion.button 
+                  initial={{ opacity: 0, x: -20, scale: 0.8 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={(e) => { e.stopPropagation(); handleInstallClick(); }}
+                  className="p-3 bg-accent/20 backdrop-blur-2xl border border-accent/40 rounded-full text-white shadow-2xl group flex items-center gap-2 self-start"
+                  title="Install App"
+                >
+                  <Download size={18} className="text-accent" />
+                  <div className="flex flex-col items-start overflow-hidden">
+                    <span className="text-[7px] font-black uppercase tracking-widest leading-none text-accent mb-0.5">PWA Ready</span>
+                    <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Install App</span>
+                  </div>
+                </motion.button>
+              )}
+            </div>
           </div>
 
           {aiHumanDetection && subjectBox && (
