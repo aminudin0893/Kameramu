@@ -389,27 +389,6 @@ export default function App() {
   const [focusMode, setFocusMode] = useState<FocusMode>('FOCUS_SUBJECT');
   const [aiHumanDetection, setAiHumanDetection] = useState(false);
   const [subjectBox, setSubjectBox] = useState<{ymin:number, xmin:number, ymax:number, xmax:number} | null>(null);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-
-  // PWA logic
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
-  };
 
   // AI Human Detection Auto-activation for iPhone Filters
   useEffect(() => {
@@ -1439,24 +1418,6 @@ export default function App() {
               >
                 <img src={capturedImage} className="w-full h-full object-cover" />
               </div>
-            )}
-
-            {deferredPrompt && (
-              <motion.button 
-                initial={{ opacity: 0, x: -20, scale: 0.8 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => { e.stopPropagation(); handleInstallClick(); }}
-                className="p-3 bg-accent backdrop-blur-2xl border border-white/20 rounded-full text-white shadow-[0_0_20px_rgba(255,77,0,0.3)] group flex items-center gap-2 self-start"
-                title="Install App"
-              >
-                <Download size={18} className="text-white" />
-                <div className="flex flex-col items-start overflow-hidden">
-                  <span className="text-[7px] font-black uppercase tracking-widest leading-none text-white/70 mb-0.5">App Ready</span>
-                  <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Install App</span>
-                </div>
-              </motion.button>
             )}
           </div>
 
