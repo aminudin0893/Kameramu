@@ -361,6 +361,7 @@ export default function App() {
   const [torchOn, setTorchOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const isInitializingRef = useRef(false);
   const [isUploadedImage, setIsUploadedImage] = useState(false);
   const currentStreamRef = useRef<MediaStream | null>(null);
   
@@ -554,61 +555,31 @@ export default function App() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Initialize Camera
+  const fileInputRef = useRef<HTMLInputElement>(null);  // Initialize Camera
   const startCamera = useCallback(async () => {
-    if (!hasStarted || isInitializing) return;
+    if (!hasStarted) return;
     
+    // Use ref to avoid state batching race conditions
+    if (isInitializingRef.current) return;
+    
+    isInitializingRef.current = true;
     setIsInitializing(true);
     setCameraError(null);
     
-    const stopAllTracks = () => {
-      // 1. Clear state and tracks aggressively
+    try {
+      // Cleanup previous stream
       if (currentStreamRef.current) {
-        currentStreamRef.current.getTracks().forEach(t => {
-          try { t.stop(); } catch(e) {}
-        });
+        currentStreamRef.current.getTracks().forEach(t => t.stop());
         currentStreamRef.current = null;
       }
-      
       if (stream) {
-        stream.getTracks().forEach(t => {
-          try { t.stop(); } catch(e) {}
-        });
+        stream.getTracks().forEach(t => t.stop());
         setStream(null);
       }
       
-      // 2. Completely reset the video element to release hardware lock
-      if (videoRef.current) {
-        const video = videoRef.current;
-        video.pause();
-        video.srcObject = null;
-        video.load(); // Force browser to discard internal buffers
-      }
-    };
+      // Cooldown for mobile hardware to release lock
+      await new Promise(r => setTimeout(r, 600));
 
-    stopAllTracks();
-
-    // 3. Significant delay (1 second) to allow hardware to fully shut down
-    // Many mobile chipsets take ~500-800ms to release a camera lock
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const attemptCapture = async (constraints: MediaStreamConstraints) => {
-      try {
-        return await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (e: any) {
-        console.warn(`Initial attempt failed (${e.name}):`, e.message);
-        // If the hardware is "Readable but busy", wait longer and retry exactly once
-        if (e.name === 'NotReadableError' || e.name === 'SourceUnavailableError' || e.name === 'AbortError') {
-          await new Promise(r => setTimeout(r, 1500));
-          return await navigator.mediaDevices.getUserMedia(constraints);
-        }
-        throw e;
-      }
-    };
-
-    try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("NOT_SUPPORTED");
       }
@@ -618,75 +589,48 @@ export default function App() {
         UHD: { w: 1920, h: 1080 }
       };
       
-      // We use a simpler constraint set first to maximize success rate
       const constraints: MediaStreamConstraints = { 
         video: { 
           facingMode: { ideal: facingMode }, 
           width: { ideal: resSettings[resolution].w },
           height: { ideal: resSettings[resolution].h }
-        },
-        audio: false
+        }
       };
       
-      const res = await attemptCapture(constraints);
+      const res = await navigator.mediaDevices.getUserMedia(constraints);
       currentStreamRef.current = res;
       setStream(res);
       
       if (videoRef.current) {
-        const video = videoRef.current;
-        video.srcObject = res;
-        video.setAttribute('playsinline', '');
-        
-        // Ensure playback starts only after hardware is definitely ready
-        video.onloadedmetadata = () => {
-          setTimeout(() => {
-            video.play().catch(e => {
-              console.warn("Retrying play after error:", e);
-              video.play();
-            });
-          }, 150);
+        videoRef.current.srcObject = res;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(() => {});
         };
       }
     } catch (err: any) {
-      console.error("Camera System Critical Error:", err.name, err.message);
+      console.warn("Camera Init Failed:", err.name);
       
-      // Fallback 1: Absolute Basic (Ignoring resolution entirely)
+      // Attempt Basic Fallback
       try {
-        const fallback1 = await attemptCapture({ 
-          video: { facingMode: { ideal: facingMode } } 
-        });
-        currentStreamRef.current = fallback1;
-        setStream(fallback1);
+        const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
+        currentStreamRef.current = fallback;
+        setStream(fallback);
         if (videoRef.current) {
-          videoRef.current.srcObject = fallback1;
-          videoRef.current.play();
+          videoRef.current.srcObject = fallback;
+          videoRef.current.play().catch(() => {});
         }
       } catch (err2: any) {
-        // Fallback 2: Universal (Any camera found)
-        try {
-          const fallback2 = await navigator.mediaDevices.getUserMedia({ video: true });
-          currentStreamRef.current = fallback2;
-          setStream(fallback2);
-          if (videoRef.current) {
-            videoRef.current.srcObject = fallback2;
-            videoRef.current.play();
-          }
-        } catch (err3: any) {
-          let msg = "Kamera Gagal Dimuat.";
-          if (err3.name === 'NotAllowedError') msg = "Izin Ditolak. Harap buka pengaturan dan izinkan kamera.";
-          else if (err3.name === 'NotFoundError') msg = "Perangkat kamera tidak ditemukan.";
-          else if (err3.name === 'NotReadableError') msg = "Kamera sedang sibuk (terkunci). Tutup aplikasi kamera lain.";
-          else if (err3.name === 'AbortError') msg = "Sistem menghentikan akses. Silakan Refresh halaman.";
-          
-          setCameraError(`${msg} (${err3.name})`);
-        }
+        let msg = "Kamera Gagal Dimuat.";
+        if (err2.name === 'NotAllowedError') msg = "Izin Kamera Ditolak.";
+        else if (err2.name === 'NotReadableError') msg = "Kamera sedang sibuk.";
+        setCameraError(`${msg} (${err2.name})`);
       }
     } finally {
       setIsInitializing(false);
+      isInitializingRef.current = false;
     }
-  }, [facingMode, hasStarted, resolution]); // Stable dependencies
+  }, [facingMode, hasStarted, resolution]);
 
-  // Auto-init only when explicitly starting
   useEffect(() => {
     if (hasStarted) {
       startCamera();
@@ -696,8 +640,26 @@ export default function App() {
         currentStreamRef.current.getTracks().forEach(t => t.stop());
       }
     };
-  }, [hasStarted, facingMode, resolution]); // dependencies are stabilized by useCallback above
+  }, [hasStarted, facingMode, resolution, startCamera]);
 
+  // GPS Button Fix - Ensure it's basic and visible
+  const renderGPSButton = () => (
+    <motion.button 
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
+      className={`p-4 backdrop-blur-xl border-2 rounded-full shadow-2xl flex items-center gap-3 transition-all z-[100] ${timemarkEnabled ? 'bg-accent/90 border-white text-white' : 'bg-black/70 border-white/20 text-white'}`}
+      style={{ pointerEvents: 'auto' }}
+    >
+      <MapPin size={24} className={timemarkEnabled ? "text-white animate-pulse" : "text-white"} />
+      <div className="flex flex-col items-start leading-none">
+        <span className="text-[9px] font-black uppercase tracking-widest mb-1">GPS SENSOR</span>
+        <span className="text-[11px] font-bold uppercase truncate max-w-[120px]">
+          {locationText === "Pro Sensor Active" ? "SYNC LOCATION" : "ACTIVE"}
+        </span>
+      </div>
+    </motion.button>
+  );
 
   // Handle Torch
   useEffect(() => {
@@ -1483,35 +1445,19 @@ export default function App() {
               </div>
             )}
             
-            <div className="flex flex-col gap-2">
-              <motion.button 
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
-                className={`p-3 backdrop-blur-xl border rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] group flex items-center gap-2 self-start transition-all ${timemarkEnabled ? 'bg-accent border-accent text-white' : 'bg-black/60 border-white/20 text-white hover:bg-black/80'}`}
-                title="Refresh GPS Address"
+            {renderGPSButton()}
+            
+            {locationText !== "Pro Sensor Active" && locationText !== "GPS Access Denied" && (
+              <motion.div 
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 max-w-[200px] shadow-xl mt-[-8px] ml-2"
               >
-                <MapPin size={22} className={timemarkEnabled ? "text-white animate-pulse" : "text-white/90"} />
-                <div className="flex flex-col items-start overflow-hidden">
-                  <span className="text-[8px] font-black uppercase tracking-widest leading-none mb-0.5">GPS Sensor</span>
-                  <span className="text-[10px] font-bold uppercase tracking-tight whitespace-nowrap">
-                    {locationText === "Pro Sensor Active" ? "SYNC GPS" : "ACTIVE"}
-                  </span>
-                </div>
-              </motion.button>
-              
-              {locationText !== "Pro Sensor Active" && locationText !== "GPS Access Denied" && (
-                <motion.div 
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 max-w-[200px] shadow-xl"
-                >
-                  <p className="text-[9px] text-accent font-mono font-bold line-clamp-2 uppercase leading-tight italic">
-                    {locationText}
-                  </p>
-                </motion.div>
-              )}
-            </div>
+                <p className="text-[9px] text-accent font-mono font-bold line-clamp-2 uppercase leading-tight italic">
+                  {locationText}
+                </p>
+              </motion.div>
+            )}
           </div>
 
           {aiHumanDetection && subjectBox && (
