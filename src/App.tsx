@@ -562,18 +562,34 @@ export default function App() {
     setIsInitializing(true);
     setCameraError(null);
     
-    // 1. Extreme Cleanup: ensure everything is stopped before restart
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      setStream(null);
-    }
-    
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    const stopAllTracks = () => {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        setStream(null);
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+
+    stopAllTracks();
 
     // Small delay to allow hardware release
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    const attemptCapture = async (constraints: MediaStreamConstraints) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        return stream;
+      } catch (e: any) {
+        if (e.name === 'NotReadableError') {
+          // Retry once more after a delay if busy
+          await new Promise(r => setTimeout(r, 600));
+          return await navigator.mediaDevices.getUserMedia(constraints);
+        }
+        throw e;
+      }
+    };
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -595,7 +611,7 @@ export default function App() {
         audio: false
       };
       
-      const res = await navigator.mediaDevices.getUserMedia(constraints);
+      const res = await attemptCapture(constraints);
       setStream(res);
       
       if (videoRef.current) {
@@ -609,25 +625,25 @@ export default function App() {
     } catch (err: any) {
       console.warn("Primary camera init failed:", err.name, err.message);
       
-      // Fallback 1: Try without high-res constraints
+      // Fallback 1: Relaxed constraints
       try {
-        const fallback1 = await navigator.mediaDevices.getUserMedia({ 
+        const fallback1 = await attemptCapture({ 
           video: { facingMode: { ideal: facingMode } } 
         });
         setStream(fallback1);
         if (videoRef.current) {
           videoRef.current.srcObject = fallback1;
-          videoRef.current.play();
+          videoRef.current.play().catch(e => console.error("Fallback 1 play failed", e));
         }
       } catch (err2: any) {
         console.warn("Fallback 1 failed:", err2.name);
-        // Fallback 2: Absolute basic (any camera)
+        // Fallback 2: Any camera
         try {
-          const fallback2 = await navigator.mediaDevices.getUserMedia({ video: true });
+          const fallback2 = await attemptCapture({ video: true });
           setStream(fallback2);
           if (videoRef.current) {
             videoRef.current.srcObject = fallback2;
-            videoRef.current.play();
+            videoRef.current.play().catch(e => console.error("Fallback 2 play failed", e));
           }
         } catch (err3: any) {
           let msg = "Kamera Gagal Dimuat.";
@@ -641,7 +657,7 @@ export default function App() {
     } finally {
       setIsInitializing(false);
     }
-  }, [facingMode, hasStarted, resolution]);
+  }, [facingMode, hasStarted, resolution, stream]);
 
   useEffect(() => {
     if (hasStarted) {
@@ -1426,7 +1442,7 @@ export default function App() {
           </div>
 
           {/* Top-Left Control Actions */}
-          <div className="absolute top-6 left-6 z-[45] flex flex-col gap-4">
+          <div className="absolute top-6 left-6 z-[60] flex flex-col gap-4">
             {capturedImage && (
               <div 
                 className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer" 
@@ -1441,14 +1457,14 @@ export default function App() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
-                className={`p-3 backdrop-blur-2xl border rounded-full shadow-2xl group flex items-center gap-2 self-start transition-colors ${timemarkEnabled ? 'bg-accent/20 border-accent/40 text-accent' : 'bg-black/60 border-white/10 text-white'}`}
+                className={`p-3 backdrop-blur-3xl border rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] group flex items-center gap-2 self-start transition-all ${timemarkEnabled ? 'bg-accent/40 border-accent text-white' : 'bg-black/60 border-white/20 text-white hover:bg-black/80'}`}
                 title="Refresh GPS Address"
               >
-                <MapPin size={20} className={timemarkEnabled ? "text-accent animate-pulse" : "text-white/80"} />
+                <MapPin size={22} className={timemarkEnabled ? "text-white animate-pulse" : "text-white/90"} />
                 <div className="flex flex-col items-start overflow-hidden">
-                  <span className="text-[7px] font-black uppercase tracking-widest leading-none mb-0.5">GPS Sensor</span>
-                  <span className="text-[9px] font-bold uppercase tracking-tight whitespace-nowrap">
-                    {locationText === "Pro Sensor Active" ? "Connect GPS" : "Status: Active"}
+                  <span className="text-[8px] font-black uppercase tracking-widest leading-none mb-0.5">GPS Sensor</span>
+                  <span className="text-[10px] font-bold uppercase tracking-tight whitespace-nowrap">
+                    {locationText === "Pro Sensor Active" ? "SYNC GPS" : "ACTIVE"}
                   </span>
                 </div>
               </motion.button>
@@ -1457,9 +1473,9 @@ export default function App() {
                 <motion.div 
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/5 max-w-[180px]"
+                  className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 max-w-[200px] shadow-xl"
                 >
-                  <p className="text-[8px] text-white/60 font-mono line-clamp-2 uppercase leading-tight italic">
+                  <p className="text-[9px] text-accent font-mono font-bold line-clamp-2 uppercase leading-tight italic">
                     {locationText}
                   </p>
                 </motion.div>
@@ -1550,12 +1566,20 @@ export default function App() {
               <Camera size={48} className="mx-auto text-accent mb-4 opacity-50" />
               <p className="text-white text-sm font-bold uppercase tracking-widest">Camera Error</p>
               <p className="text-text-dim text-xs max-w-xs leading-relaxed">{cameraError}</p>
-              <button 
-                onClick={() => window.location.reload()}
-                className="mt-4 px-6 py-2 bg-accent text-white text-[10px] font-bold uppercase tracking-tighter hover:scale-105 transition-transform"
-              >
-                Retry Connection
-              </button>
+              <div className="flex flex-col gap-3 mt-6">
+                <button 
+                  onClick={startCamera}
+                  className="px-6 py-3 bg-accent text-white text-[11px] font-bold uppercase tracking-widest hover:scale-105 transition-transform shadow-lg shadow-accent/20"
+                >
+                  Hubungkan Ulang Kamera
+                </button>
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-2 border border-white/20 text-white/60 text-[9px] font-bold uppercase tracking-tighter hover:text-white transition-colors"
+                >
+                  Hard Reset (Refresh)
+                </button>
+              </div>
             </div>
           ) : !stream ? (
             <div className="flex flex-col items-center gap-6 z-50">
