@@ -577,6 +577,16 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize Camera
+  const stopCamera = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        track.stop();
+        console.log("System: Track stopped:", track.label);
+      });
+      setStream(null);
+    }
+  }, [stream]);
+
   const startCamera = useCallback(async () => {
     if (!hasStarted) return;
     setIsInitializing(true);
@@ -588,10 +598,13 @@ export default function App() {
         throw new Error("NOT_SUPPORTED");
       }
 
-      // 1. Cleanup existing stream
+      // 1. Explicitly stop current stream before requesting new one
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
       }
+      
+      // Delay slightly to allow hardware release
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       // 2. Constraints for Selected Resolution
       const resSettings = {
@@ -1442,20 +1455,6 @@ export default function App() {
             )}
 
             <div className="flex flex-col gap-2">
-              <motion.button 
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
-                className="p-3 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-full text-white hover:border-accent/40 shadow-2xl group flex items-center gap-2 self-start"
-                title="Refresh GPS Address"
-              >
-                <MapPin size={18} className={timemarkEnabled ? "text-accent" : "text-white/40"} />
-                <div className="flex flex-col items-start overflow-hidden">
-                  <span className="text-[7px] font-black uppercase tracking-widest leading-none text-accent mb-0.5">GPS Sync</span>
-                  <span className="text-[9px] font-bold uppercase tracking-tight hidden group-hover:block whitespace-nowrap">Refresh Location</span>
-                </div>
-              </motion.button>
-
               {deferredPrompt && (
                 <motion.button 
                   initial={{ opacity: 0, x: -20, scale: 0.8 }}
@@ -1791,7 +1790,6 @@ export default function App() {
                   </div>
                 {(locationText || timemarkManualText) && (
                   <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                    <MapPin size={12} className="text-accent" />
                     <span className="text-[10px] font-mono text-white/80 uppercase tracking-tight">
                       {timemarkManualText ? `${timemarkManualText} • ` : ''}{locationText}
                     </span>
@@ -2205,7 +2203,6 @@ export default function App() {
                             />
                           ) : (
                             <div className="bg-white/5 rounded-xl px-3 py-2 flex items-start gap-2 border border-white/5">
-                              <MapPin size={10} className="text-accent shrink-0 mt-0.5" />
                               <span className="text-[9px] text-white/60 leading-relaxed italic line-clamp-3">{locationText}</span>
                             </div>
                           )}
