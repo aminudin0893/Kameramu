@@ -362,6 +362,7 @@ export default function App() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [isUploadedImage, setIsUploadedImage] = useState(false);
+  const currentStreamRef = useRef<MediaStream | null>(null);
   
   // Timemark State
   const [timemarkEnabled, setTimemarkEnabled] = useState(false);
@@ -563,6 +564,10 @@ export default function App() {
     setCameraError(null);
     
     const stopAllTracks = () => {
+      if (currentStreamRef.current) {
+        currentStreamRef.current.getTracks().forEach(t => t.stop());
+        currentStreamRef.current = null;
+      }
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
         setStream(null);
@@ -574,17 +579,17 @@ export default function App() {
 
     stopAllTracks();
 
-    // Small delay to allow hardware release
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Larger delay to allow hardware release
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     const attemptCapture = async (constraints: MediaStreamConstraints) => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        return stream;
+        const res = await navigator.mediaDevices.getUserMedia(constraints);
+        return res;
       } catch (e: any) {
-        if (e.name === 'NotReadableError') {
-          // Retry once more after a delay if busy
-          await new Promise(r => setTimeout(r, 600));
+        if (e.name === 'NotReadableError' || e.name === 'SourceUnavailableError') {
+          // Retry after a longer delay if busy
+          await new Promise(r => setTimeout(r, 1000));
           return await navigator.mediaDevices.getUserMedia(constraints);
         }
         throw e;
@@ -597,8 +602,8 @@ export default function App() {
       }
 
       const resSettings = {
-        HD: { w: 1920, h: 1080 },
-        UHD: { w: 3840, h: 2160 }
+        HD: { w: 1280, h: 720 },
+        UHD: { w: 1920, h: 1080 }
       };
       
       const constraints: MediaStreamConstraints = { 
@@ -606,12 +611,13 @@ export default function App() {
           facingMode: { ideal: facingMode }, 
           width: { ideal: resSettings[resolution].w },
           height: { ideal: resSettings[resolution].h },
-          frameRate: { ideal: 60 }
+          frameRate: { ideal: 30 }
         },
         audio: false
       };
       
       const res = await attemptCapture(constraints);
+      currentStreamRef.current = res;
       setStream(res);
       
       if (videoRef.current) {
@@ -630,6 +636,7 @@ export default function App() {
         const fallback1 = await attemptCapture({ 
           video: { facingMode: { ideal: facingMode } } 
         });
+        currentStreamRef.current = fallback1;
         setStream(fallback1);
         if (videoRef.current) {
           videoRef.current.srcObject = fallback1;
@@ -640,6 +647,7 @@ export default function App() {
         // Fallback 2: Any camera
         try {
           const fallback2 = await attemptCapture({ video: true });
+          currentStreamRef.current = fallback2;
           setStream(fallback2);
           if (videoRef.current) {
             videoRef.current.srcObject = fallback2;
@@ -649,7 +657,7 @@ export default function App() {
           let msg = "Kamera Gagal Dimuat.";
           if (err3.name === 'NotAllowedError') msg = "Izin Ditolak. Silakan aktifkan izin kamera.";
           else if (err3.name === 'NotFoundError') msg = "Hardware kamera tidak terdeteksi.";
-          else if (err3.name === 'NotReadableError') msg = "Kamera sedang digunakan oleh aplikasi lain. Tutup aplikasi lain dan coba lagi.";
+          else if (err3.name === 'NotReadableError') msg = "Kamera sedang digunakan oleh aplikasi lain.";
           
           setCameraError(`${msg} (${err3.name})`);
         }
@@ -657,16 +665,18 @@ export default function App() {
     } finally {
       setIsInitializing(false);
     }
-  }, [facingMode, hasStarted, resolution, stream]);
+  }, [facingMode, hasStarted, resolution]);
 
   useEffect(() => {
     if (hasStarted) {
       startCamera();
     }
     return () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (currentStreamRef.current) {
+        currentStreamRef.current.getTracks().forEach(t => t.stop());
+      }
     };
-  }, [facingMode, hasStarted, resolution]);
+  }, [startCamera, facingMode, hasStarted, resolution]);
 
   // Handle Torch
   useEffect(() => {
@@ -1442,7 +1452,7 @@ export default function App() {
           </div>
 
           {/* Top-Left Control Actions */}
-          <div className="absolute top-6 left-6 z-[60] flex flex-col gap-4">
+          <div className="absolute top-6 left-6 z-[100] flex flex-col gap-4">
             {capturedImage && (
               <div 
                 className="w-16 h-16 rounded-xl border-2 border-white/20 overflow-hidden shadow-2xl hover:scale-105 transition-transform cursor-pointer" 
@@ -1457,7 +1467,7 @@ export default function App() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={(e) => { e.stopPropagation(); fetchLocation(); }}
-                className={`p-3 backdrop-blur-3xl border rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] group flex items-center gap-2 self-start transition-all ${timemarkEnabled ? 'bg-accent/40 border-accent text-white' : 'bg-black/60 border-white/20 text-white hover:bg-black/80'}`}
+                className={`p-3 backdrop-blur-xl border rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] group flex items-center gap-2 self-start transition-all ${timemarkEnabled ? 'bg-accent border-accent text-white' : 'bg-black/60 border-white/20 text-white hover:bg-black/80'}`}
                 title="Refresh GPS Address"
               >
                 <MapPin size={22} className={timemarkEnabled ? "text-white animate-pulse" : "text-white/90"} />
