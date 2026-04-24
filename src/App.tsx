@@ -24,7 +24,6 @@ import {
   X,
   Zap,
   ZapOff,
-  MapPin,
   Clock,
   History,
   Palette,
@@ -391,26 +390,6 @@ export default function App() {
   const [subjectBox, setSubjectBox] = useState<{ymin:number, xmin:number, ymax:number, xmax:number} | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
-  // PWA logic
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
-  };
-
   // AI Human Detection Auto-activation for iPhone Filters
   useEffect(() => {
     if (activeFilter.id.startsWith('ip_')) {
@@ -603,8 +582,8 @@ export default function App() {
         stream.getTracks().forEach(t => t.stop());
       }
       
-      // Delay slightly to allow hardware release
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // Delay longer to allow hardware release - critical for PWA context transitions
+      await new Promise(resolve => setTimeout(resolve, 400));
 
       // 2. Constraints for Selected Resolution
       const resSettings = {
@@ -669,6 +648,39 @@ export default function App() {
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
   }, [facingMode, hasStarted, resolution]);
+
+  // PWA & Visibility Lifecycle Management
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stopCamera();
+      } else if (document.visibilityState === 'visible' && hasStarted) {
+        startCamera();
+      }
+    };
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, [hasStarted, startCamera, stopCamera]);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   // Handle Torch
   useEffect(() => {
@@ -1392,7 +1404,6 @@ export default function App() {
                         />
                      ) : (
                         <div className="flex items-center gap-2 text-[8px] text-text-dim pt-1">
-                          <MapPin size={8} />
                           <span className="line-clamp-2 leading-relaxed">{locationText}</span>
                         </div>
                      )}
