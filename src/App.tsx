@@ -1483,20 +1483,6 @@ export default function App() {
                 <img src={capturedImage} className="w-full h-full object-cover" />
               </div>
             )}
-            
-            {renderGPSButton()}
-            
-            {locationText !== "Pro Sensor Active" && locationText !== "GPS Access Denied" && (
-              <motion.div 
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-black/60 backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 max-w-[200px] shadow-xl mt-[-8px] ml-2"
-              >
-                <p className="text-[9px] text-accent font-mono font-bold line-clamp-2 uppercase leading-tight italic">
-                  {locationText}
-                </p>
-              </motion.div>
-            )}
           </div>
 
           {aiHumanDetection && subjectBox && (
